@@ -204,6 +204,8 @@ export interface CombatState {
   skillCooldowns: Record<string, number>; // skill.id -> turns remaining
 }
 
+export type ImageModel = 'gemini-2.5-flash-image' | 'imagen-4.0-generate-001' | 'gemini-3-pro-image-preview' | 'gemini-3.1-flash-image-preview';
+
 export interface GameState {
   storyLog: StoryLogEntry[];
   isLoading: boolean;
@@ -224,6 +226,8 @@ export interface GameState {
   currentShop: { name: string; inventory: Item[] } | null;
   uiEffects: UiEffect[];
   useImageGeneration: boolean;
+  imageModel: ImageModel;
+  hasApiKey: boolean;
   locationImages: Record<string, string>;
   entityImages: Record<string, string>;
 }
@@ -264,6 +268,15 @@ export interface GeminiResponse {
     effect: string;
   };
   shopInventory?: { shopName: string; items: GeminiItem[] };
+}
+
+declare global {
+  interface Window {
+    aistudio: {
+      hasSelectedApiKey: () => Promise<boolean>;
+      openSelectKey: () => Promise<void>;
+    };
+  }
 }
 
 export interface GeminiCombatResponse {

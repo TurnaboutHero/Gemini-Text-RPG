@@ -24,6 +24,8 @@ export const getInitialState = (): GameState => {
     currentShop: null,
     uiEffects: [],
     useImageGeneration: true,
+    imageModel: 'gemini-2.5-flash-image',
+    hasApiKey: false,
     locationImages: {},
     entityImages: {},
   };

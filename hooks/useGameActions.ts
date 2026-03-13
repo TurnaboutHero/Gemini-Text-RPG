@@ -1,5 +1,5 @@
 import { useCallback, useRef } from 'react';
-import { GameState, Character, SpecialAction, StoryPartType, AiScenePart, UserStoryPart, SystemMessagePart } from '../types';
+import { GameState, Character, SpecialAction, StoryPartType, AiScenePart, UserStoryPart, SystemMessagePart, ImageModel } from '../types';
 import * as orchestrator from '../services/orchestratorService';
 import { generateInitialImage, editImage } from '../services/geminiService';
 import { audioService } from '../services/audioService';
@@ -14,6 +14,21 @@ export const useGameActions = (
   setIsCharacterSheetOpen: (isOpen: boolean) => void
 ) => {
   const lastActionRef = useRef<(() => Promise<void>) | null>(null);
+
+  const checkApiKey = async (model: ImageModel): Promise<boolean> => {
+    if (model === 'gemini-3-pro-image-preview' || model === 'gemini-3.1-flash-image-preview') {
+      const hasKey = await window.aistudio.hasSelectedApiKey();
+      if (!hasKey) {
+        await window.aistudio.openSelectKey();
+        // Assume success after opening dialog as per instructions
+        setGameState(prev => ({ ...prev, hasApiKey: true }));
+        return true;
+      }
+      setGameState(prev => ({ ...prev, hasApiKey: true }));
+      return true;
+    }
+    return true;
+  };
 
   const handleAction = async (actionFn: () => Promise<void>) => {
     lastActionRef.current = actionFn;
@@ -34,7 +49,7 @@ export const useGameActions = (
     }
   };
 
-  const processActionResult = useCallback(async (result: orchestrator.PlayerActionResult, previousImageUrl: string, useImageGeneration: boolean, currentLocationId: string | null, locationImages: Record<string, string>) => {
+  const processActionResult = useCallback(async (result: orchestrator.PlayerActionResult, previousImageUrl: string, useImageGeneration: boolean, currentLocationId: string | null, locationImages: Record<string, string>, imageModel: ImageModel) => {
     const { newScene, updatedCharacter, updatedPlan, systemMessages, updatedSummaries, updatedNpcs, updatedLocationId, updatedWorldMap, enemiesToBattle, shop, newEntityImages } = result;
     
     if (newScene.timeElapsed && newScene.timeElapsed > 0) {
@@ -146,12 +161,12 @@ export const useGameActions = (
         if (updatedLocationId && updatedLocationId !== currentLocationId && newLocationImages[updatedLocationId]) {
              finalImageUrl = newLocationImages[updatedLocationId];
         } else if (imageSetting === 'GENERATE' || (imageSetting === 'EDIT' && !base64Data)) {
-            finalImageUrl = await generateInitialImage(newScene.imagePrompt);
+            finalImageUrl = await generateInitialImage(newScene.imagePrompt, imageModel);
             if (updatedLocationId) {
                 newLocationImages[updatedLocationId] = finalImageUrl;
             }
         } else if (imageSetting === 'EDIT' && base64Data) {
-            const editedImage = await editImage(newScene.imagePrompt, base64Data);
+            const editedImage = await editImage(newScene.imagePrompt, base64Data, imageModel);
             finalImageUrl = editedImage ?? previousImageUrl;
             if (updatedLocationId) {
                 newLocationImages[updatedLocationId] = finalImageUrl;
@@ -176,6 +191,10 @@ export const useGameActions = (
     const perform = async () => {
       const currentState = (await new Promise<GameState>(resolve => setGameState(prev => { resolve(prev); return prev; })));
 
+      if (currentState.useImageGeneration) {
+        await checkApiKey(currentState.imageModel);
+      }
+
       const userActionPart: UserStoryPart = { id: crypto.randomUUID(), type: StoryPartType.USER_ACTION, text: actionText };
       
       const lastAiPart = [...currentState.storyLog].reverse().find(p => p.type === StoryPartType.AI_SCENE) as AiScenePart | undefined;
@@ -183,14 +202,18 @@ export const useGameActions = (
       
       setGameState(prev => ({ ...prev, isLoading: true, error: null, storyLog: [...prev.storyLog, userActionPart], suggestedActions: [], currentShop: null }));
       
-      const result = await orchestrator.processPlayerAction(actionText, currentState.character!, currentState.storyLog, currentState.currentChapterPlan!, currentState.chapterSummaries, currentState.npcs, currentState.currentLocationId, currentState.worldMap, currentState.currentTime, currentState.currentDay, currentState.useImageGeneration, currentState.entityImages);
-      await processActionResult(result, previousImageUrl, currentState.useImageGeneration, currentState.currentLocationId, currentState.locationImages);
+      const result = await orchestrator.processPlayerAction(actionText, currentState.character!, currentState.storyLog, currentState.currentChapterPlan!, currentState.chapterSummaries, currentState.npcs, currentState.currentLocationId, currentState.worldMap, currentState.currentTime, currentState.currentDay, currentState.useImageGeneration, currentState.imageModel, currentState.entityImages);
+      await processActionResult(result, previousImageUrl, currentState.useImageGeneration, currentState.currentLocationId, currentState.locationImages, currentState.imageModel);
     };
     
     handleAction(perform);
   };
 
-  const handleCharacterCreate = async (character: Character, useImageGeneration: boolean) => {
+  const handleCharacterCreate = async (character: Character, useImageGeneration: boolean, imageModel: ImageModel) => {
+    if (useImageGeneration) {
+      await checkApiKey(imageModel);
+    }
+
     // 1. Show loading screen immediately
     setGameState({
       ...getInitialState(),
@@ -199,11 +222,12 @@ export const useGameActions = (
       isLoading: true,
       error: null,
       useImageGeneration: useImageGeneration,
+      imageModel: imageModel,
     });
 
     try {
         // 2. Get only the chapter plan (fast operation)
-        const { chapterPlan, initialLocationId, worldMap } = await orchestrator.initializeGame(character, useImageGeneration);
+        const { chapterPlan, initialLocationId, worldMap } = await orchestrator.initializeGame(character, useImageGeneration, imageModel);
 
         // 3. Set up the game state with a placeholder for the first scene
         const placeholderScene: AiScenePart = {
@@ -230,10 +254,10 @@ export const useGameActions = (
         const initialPrompt = `모험이 시작됩니다. 캐릭터 "${character.name}"는 이제 막 "${chapterPlan.chapterTitle}"에 들어섰습니다. 시작 장소는 "${chapterPlan.locations[initialLocationId]?.name}" 입니다. 이 챕터의 첫 장면을 묘사해주세요.`;
         
         // Use processPlayerAction to generate the scene and handle all side effects
-        const result = await orchestrator.processPlayerAction(initialPrompt, character, [], chapterPlan, [], {}, initialLocationId, worldMap, 8, 1, useImageGeneration, {});
+        const result = await orchestrator.processPlayerAction(initialPrompt, character, [], chapterPlan, [], {}, initialLocationId, worldMap, 8, 1, useImageGeneration, imageModel, {});
         
         // 5. Process the result, which will replace the placeholder and generate images
-        await processActionResult(result, '', useImageGeneration, initialLocationId, {});
+        await processActionResult(result, '', useImageGeneration, initialLocationId, {}, imageModel);
         
     } catch (err) {
         setGameState(prev => ({
@@ -255,17 +279,21 @@ export const useGameActions = (
     
     const perform = async () => {
       const currentState = (await new Promise<GameState>(resolve => setGameState(prev => { resolve(prev); return prev; })));
+      
+      if (currentState.useImageGeneration) {
+        await checkApiKey(currentState.imageModel);
+      }
 
       setGameState(p => ({ ...p, isActionMenuOpen: false, isLoading: true, error: null, suggestedActions: [], currentShop: null }));
       
       const lastAiPart = [...currentState.storyLog].reverse().find(p => p.type === StoryPartType.AI_SCENE) as AiScenePart | undefined;
       const previousImageUrl = lastAiPart ? lastAiPart.imageUrl : '';
-      const result = await orchestrator.executeSpecialAction(action, currentState.character!, currentState.storyLog, currentState.currentChapterPlan!, currentState.chapterSummaries, currentState.npcs, currentState.currentLocationId, currentState.worldMap, currentState.currentTime, currentState.currentDay, currentState.useImageGeneration, currentState.entityImages);
+      const result = await orchestrator.executeSpecialAction(action, currentState.character!, currentState.storyLog, currentState.currentChapterPlan!, currentState.chapterSummaries, currentState.npcs, currentState.currentLocationId, currentState.worldMap, currentState.currentTime, currentState.currentDay, currentState.useImageGeneration, currentState.imageModel, currentState.entityImages);
 
       if ('summaryMessage' in result) {
         setGameState(p => ({ ...p, storyLog: [...p.storyLog, result.summaryMessage], isLoading: false }));
       } else if ('actionResult' in result) {
-        await processActionResult(result.actionResult, previousImageUrl, currentState.useImageGeneration, currentState.currentLocationId, currentState.locationImages);
+        await processActionResult(result.actionResult, previousImageUrl, currentState.useImageGeneration, currentState.currentLocationId, currentState.locationImages, currentState.imageModel);
       }
     };
     

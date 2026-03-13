@@ -90,7 +90,7 @@ const App: React.FC = () => {
   };
 
   if (gameState.gamePhase === 'start_menu') return <Introduction onStartCreation={handleStartCreation} onContinueGame={handleContinueGame} hasSavedGame={savedGameExists} />;
-  if (gameState.gamePhase === 'character_creation') return <CharacterCreator onCharacterCreate={handleCharacterCreate} initialUseImageGeneration={gameState.useImageGeneration} />;
+  if (gameState.gamePhase === 'character_creation') return <CharacterCreator onCharacterCreate={handleCharacterCreate} initialUseImageGeneration={gameState.useImageGeneration} initialImageModel={gameState.imageModel} />;
   if (gameState.gamePhase === 'prologue') {
     const prologuePart = gameState.storyLog[0] as AiScenePart | undefined;
     if (gameState.isLoading || !prologuePart) {

@@ -520,10 +520,23 @@ export const generateSummary = async (chapterSummaries: string[], storyLog: Stor
     }
 };
 
-export const generateInitialImage = async (prompt: string): Promise<string> => {
+export const generateInitialImage = async (prompt: string, model: ImageModel = 'gemini-2.5-flash-image'): Promise<string> => {
     try {
+        if (model === 'imagen-4.0-generate-001') {
+            const response = await ai.models.generateImages({
+                model: model,
+                prompt: `Epic fantasy adventure game screen, digital painting, atmospheric lighting, wide angle. ${prompt}`,
+                config: {
+                    numberOfImages: 1,
+                    aspectRatio: "16:9",
+                }
+            });
+            const base64Data = response.generatedImages[0].image.imageBytes;
+            return `data:image/jpeg;base64,${base64Data}`;
+        }
+
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash-image',
+            model: model,
             contents: {
                 parts: [
                     { text: `Epic fantasy adventure game screen, digital painting, atmospheric lighting, wide angle. ${prompt}` }
@@ -531,7 +544,8 @@ export const generateInitialImage = async (prompt: string): Promise<string> => {
             },
             config: {
                 imageConfig: {
-                    aspectRatio: "16:9"
+                    aspectRatio: "16:9",
+                    imageSize: (model === 'gemini-3-pro-image-preview' || model === 'gemini-3.1-flash-image-preview') ? "1K" : undefined
                 }
             }
         });
@@ -547,7 +561,7 @@ export const generateInitialImage = async (prompt: string): Promise<string> => {
     }
 };
 
-export const generateMapImage = async (worldMap: WorldMap): Promise<string> => {
+export const generateMapImage = async (worldMap: WorldMap, model: ImageModel = 'gemini-2.5-flash-image'): Promise<string> => {
     try {
         const locationDescriptions = Object.values(worldMap).map(loc => {
             const exitInfo = Object.entries(loc.exits).map(([dir, destId]) => {
@@ -559,8 +573,21 @@ export const generateMapImage = async (worldMap: WorldMap): Promise<string> => {
 
         const prompt = `Top-down fantasy world map, old parchment paper texture, hand-drawn style with intricate details, geographic elements like forests, mountains, rivers should be visible. The map illustrates the following connected locations:\n${locationDescriptions}\nEnsure all named locations are clearly visible and connected according to the description.`;
         
+        if (model === 'imagen-4.0-generate-001') {
+            const response = await ai.models.generateImages({
+                model: model,
+                prompt: prompt,
+                config: {
+                    numberOfImages: 1,
+                    aspectRatio: "16:9",
+                }
+            });
+            const base64Data = response.generatedImages[0].image.imageBytes;
+            return `data:image/jpeg;base64,${base64Data}`;
+        }
+
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash-image',
+            model: model,
             contents: {
                 parts: [
                     { text: prompt }
@@ -568,7 +595,8 @@ export const generateMapImage = async (worldMap: WorldMap): Promise<string> => {
             },
             config: {
                 imageConfig: {
-                    aspectRatio: "16:9"
+                    aspectRatio: "16:9",
+                    imageSize: (model === 'gemini-3-pro-image-preview' || model === 'gemini-3.1-flash-image-preview') ? "1K" : undefined
                 }
             }
         });
@@ -588,9 +616,24 @@ export const generateMapImage = async (worldMap: WorldMap): Promise<string> => {
 export const generateCharacterImage = async (
     characterPrompt: string,
     characterName: string,
-    referenceImageBase64?: string | null
+    referenceImageBase64?: string | null,
+    model: ImageModel = 'gemini-2.5-flash-image'
 ): Promise<string> => {
     try {
+        if (model === 'imagen-4.0-generate-001') {
+             const prompt = `Epic fantasy RPG character portrait, digital painting, detailed face. ${characterPrompt}. Centered, atmospheric lighting, high quality.`;
+             const response = await ai.models.generateImages({
+                model: model,
+                prompt: prompt,
+                config: {
+                    numberOfImages: 1,
+                    aspectRatio: "1:1",
+                }
+            });
+            const base64Data = response.generatedImages[0].image.imageBytes;
+            return `data:image/jpeg;base64,${base64Data}`;
+        }
+
         if (referenceImageBase64) {
             const base64Data = referenceImageBase64.split(',')[1];
             if (!base64Data) throw new Error("잘못된 참고 이미지 형식입니다.");
@@ -598,11 +641,12 @@ export const generateCharacterImage = async (
             const imagePart = { inlineData: { data: base64Data, mimeType: mimeType } };
             const textPart = { text: `이 이미지를 참고하여 서사적인 판타지 RPG 캐릭터 초상화를 만들어주세요. 캐릭터 설명: "${characterPrompt}". 참고 이미지의 스타일을 유지하면서 이 설명에 맞게 캐릭터를 그려주세요. 디지털 페인팅 스타일과 분위기 있는 조명을 사용해주세요.` };
             const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash-image',
+                model: model,
                 contents: { parts: [imagePart, textPart] },
                 config: {
                     imageConfig: {
-                        aspectRatio: "1:1"
+                        aspectRatio: "1:1",
+                        imageSize: (model === 'gemini-3-pro-image-preview' || model === 'gemini-3.1-flash-image-preview') ? "1K" : undefined
                     }
                 }
             });
@@ -616,7 +660,7 @@ export const generateCharacterImage = async (
         } else {
             const prompt = `Epic fantasy RPG character portrait, digital painting, detailed face. ${characterPrompt}. Centered, atmospheric lighting, high quality.`;
             const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash-image',
+                model: model,
                 contents: {
                     parts: [
                         { text: prompt }
@@ -624,7 +668,8 @@ export const generateCharacterImage = async (
                 },
                 config: {
                     imageConfig: {
-                        aspectRatio: "1:1"
+                        aspectRatio: "1:1",
+                        imageSize: (model === 'gemini-3-pro-image-preview' || model === 'gemini-3.1-flash-image-preview') ? "1K" : undefined
                     }
                 }
             });
@@ -641,12 +686,18 @@ export const generateCharacterImage = async (
     }
 };
 
-export const editImage = async (prompt: string, base64ImageData: string): Promise<string | null> => {
+export const editImage = async (prompt: string, base64ImageData: string, model: ImageModel = 'gemini-2.5-flash-image'): Promise<string | null> => {
     try {
+        if (model === 'imagen-4.0-generate-001') {
+            // Imagen 4.0 doesn't support direct editing in the same way as Gemini Flash Image yet in this SDK
+            // We fallback to generation or just return null if not supported
+            return null; 
+        }
+
         const imagePart = { inlineData: { data: base64ImageData, mimeType: 'image/jpeg' } };
         const textPart = { text: `이 새로운 맥락에 맞게 이미지를 미묘하게 수정하세요: ${prompt}. 전체적인 스타일과 구성을 유지하면서 새로운 이야기의 흐름을 반영해주세요.` };
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash-image',
+            model: model,
             contents: { parts: [imagePart, textPart] },
         });
         const parts = response?.candidates?.[0]?.content?.parts ?? [];

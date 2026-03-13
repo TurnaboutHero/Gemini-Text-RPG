@@ -1,8 +1,8 @@
 import { generateChapterPlan, generateScene, summarizeText, generateCharacterImage, generateSummary, generateCombatTurnResult, generateMapImage } from './geminiService';
-import { Character, ChapterPlan, GeminiResponse, StoryLogEntry, Item, SystemMessagePart, StoryPartType, AiScenePart, Npc, SpecialAction, SpecialActionType, WorldMap, Enemy, CombatState, GeminiCombatResponse } from '../types';
+import { Character, ChapterPlan, GeminiResponse, StoryLogEntry, Item, SystemMessagePart, StoryPartType, AiScenePart, Npc, SpecialAction, SpecialActionType, WorldMap, Enemy, CombatState, GeminiCombatResponse, ImageModel } from '../types';
 import { processStateChanges } from './stateManagerService';
 
-export const initializeGame = async (character: Character, useImageGeneration: boolean): Promise<{
+export const initializeGame = async (character: Character, useImageGeneration: boolean, imageModel: ImageModel = 'gemini-2.5-flash-image'): Promise<{
   chapterPlan: ChapterPlan;
   initialLocationId: string;
   worldMap: WorldMap;
@@ -17,7 +17,7 @@ export const initializeGame = async (character: Character, useImageGeneration: b
       throw new Error("AI가 생성한 챕터 계획에 유효한 시작 장소가 없습니다. 다시 시도해 주세요.");
   }
 
-  const mapImageUrl = useImageGeneration ? await generateMapImage(planData.locations) : '';
+  const mapImageUrl = useImageGeneration ? await generateMapImage(planData.locations, imageModel) : '';
 
   const chapterPlan: ChapterPlan = {
       ...planData,
@@ -42,6 +42,7 @@ export const executeSpecialAction = async (
   currentTime: number,
   currentDay: number,
   useImageGeneration: boolean,
+  imageModel: ImageModel = 'gemini-2.5-flash-image',
   entityImages: Record<string, string> = {}
 ): Promise<{ summaryMessage: SystemMessagePart } | { actionResult: PlayerActionResult }> => {
     switch (action.type) {
@@ -58,14 +59,14 @@ export const executeSpecialAction = async (
             if (!action.payload) throw new Error("대화할 NPC가 지정되지 않았습니다.");
             const talkActionText = `"${action.payload}에게 말을 건다."`;
             return { 
-                actionResult: await processPlayerAction(talkActionText, character, storyLog, currentPlan, chapterSummaries, currentNpcs, currentLocationId, worldMap, currentTime, currentDay, useImageGeneration, entityImages) 
+                actionResult: await processPlayerAction(talkActionText, character, storyLog, currentPlan, chapterSummaries, currentNpcs, currentLocationId, worldMap, currentTime, currentDay, useImageGeneration, imageModel, entityImages) 
             };
 
         case SpecialActionType.USE_ITEM:
             if (!action.payload) throw new Error("사용할 아이템이 지정되지 않았습니다.");
             const useItemActionText = `"${action.payload}을(를) 사용한다."`;
              return { 
-                actionResult: await processPlayerAction(useItemActionText, character, storyLog, currentPlan, chapterSummaries, currentNpcs, currentLocationId, worldMap, currentTime, currentDay, useImageGeneration, entityImages) 
+                actionResult: await processPlayerAction(useItemActionText, character, storyLog, currentPlan, chapterSummaries, currentNpcs, currentLocationId, worldMap, currentTime, currentDay, useImageGeneration, imageModel, entityImages) 
             };
 
         default:
@@ -85,6 +86,7 @@ export const processPlayerAction = async (
   currentTime: number,
   currentDay: number,
   useImageGeneration: boolean,
+  imageModel: ImageModel = 'gemini-2.5-flash-image',
   entityImages: Record<string, string> = {}
 ): Promise<{
   newScene: GeminiResponse;
@@ -145,7 +147,7 @@ export const processPlayerAction = async (
       }
 
       const planData = await generateChapterPlan(character, updatedSummaries);
-      const mapImageUrl = useImageGeneration ? await generateMapImage(planData.locations) : '';
+      const mapImageUrl = useImageGeneration ? await generateMapImage(planData.locations, imageModel) : '';
       plan = { ...planData, mapImageUrl };
       
       updatedWorldMap = plan.locations;
@@ -154,7 +156,7 @@ export const processPlayerAction = async (
 
   const newScene = await generateScene(character, storyLog, actionText, plan, updatedNpcs, updatedLocationId, updatedWorldMap, currentTime, currentDay);
   
-  const { npcs: newNpcs, newEntityImages: updatedEntityImages1 } = await processNewNpcs(newScene, useImageGeneration, entityImages);
+  const { npcs: newNpcs, newEntityImages: updatedEntityImages1 } = await processNewNpcs(newScene, useImageGeneration, imageModel, entityImages);
   updatedNpcs = { ...updatedNpcs, ...newNpcs };
   
   let shop: { name: string; inventory: Item[] } | null = null;
@@ -180,7 +182,7 @@ export const processPlayerAction = async (
                   if (newEntityImages[enemyData.name]) {
                       imageUrl = newEntityImages[enemyData.name];
                   } else {
-                      imageUrl = await generateCharacterImage(enemyData.imagePrompt, enemyData.name);
+                      imageUrl = await generateCharacterImage(enemyData.imagePrompt, enemyData.name, null, imageModel);
                       newEntityImages[enemyData.name] = imageUrl;
                   }
               }
@@ -246,7 +248,7 @@ export const processPlayerCombatAction = async (
     return result;
 };
 
-const processNewNpcs = async (scene: GeminiResponse, useImageGeneration: boolean, entityImages: Record<string, string>): Promise<{ npcs: Record<string, Npc>, newEntityImages: Record<string, string> }> => {
+const processNewNpcs = async (scene: GeminiResponse, useImageGeneration: boolean, imageModel: ImageModel, entityImages: Record<string, string>): Promise<{ npcs: Record<string, Npc>, newEntityImages: Record<string, string> }> => {
     const npcs: Record<string, Npc> = {};
     let newEntityImages = { ...entityImages };
     if (!scene.newNpcs) {
@@ -259,7 +261,7 @@ const processNewNpcs = async (scene: GeminiResponse, useImageGeneration: boolean
                 if (newEntityImages[npcData.name]) {
                     imageUrl = newEntityImages[npcData.name];
                 } else {
-                    imageUrl = await generateCharacterImage(npcData.imagePrompt, npcData.name);
+                    imageUrl = await generateCharacterImage(npcData.imagePrompt, npcData.name, null, imageModel);
                     newEntityImages[npcData.name] = imageUrl;
                 }
             }

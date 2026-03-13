@@ -1,15 +1,16 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Character, Ability, Item, ItemSlot } from '../types';
+import { Character, Ability, Item, ItemSlot, ImageModel } from '../types';
 import { RACES, CLASSES, BACKGROUNDS, ABILITIES, STANDARD_ARRAY } from '../dndData';
 import { generateCharacterImage } from '../services/geminiService';
 import LoadingSpinner from './LoadingSpinner';
 
 interface CharacterCreatorProps {
-  onCharacterCreate: (character: Character, useImageGeneration: boolean) => Promise<void>;
+  onCharacterCreate: (character: Character, useImageGeneration: boolean, imageModel: ImageModel) => Promise<void>;
   initialUseImageGeneration: boolean;
+  initialImageModel: ImageModel;
 }
 
-const CharacterCreator: React.FC<CharacterCreatorProps> = ({ onCharacterCreate, initialUseImageGeneration }) => {
+const CharacterCreator: React.FC<CharacterCreatorProps> = ({ onCharacterCreate, initialUseImageGeneration, initialImageModel }) => {
   const [step, setStep] = useState(1);
   const totalSteps = 5;
 
@@ -31,6 +32,7 @@ const CharacterCreator: React.FC<CharacterCreatorProps> = ({ onCharacterCreate, 
   const [referenceImageFile, setReferenceImageFile] = useState<File | null>(null);
   const [referenceImageUrl, setReferenceImageUrl] = useState<string | null>(null);
   const [useImageGeneration, setUseImageGeneration] = useState(initialUseImageGeneration);
+  const [imageModel, setImageModel] = useState<ImageModel>(initialImageModel);
 
   const racialBonuses = useMemo(() => {
     const raceData = RACES.find(r => r.name === character.race);
@@ -110,11 +112,21 @@ const CharacterCreator: React.FC<CharacterCreatorProps> = ({ onCharacterCreate, 
         setImageError("이미지를 생성하려면 이름, 종족, 클래스, 배경을 모두 선택해야 합니다.");
         return;
     }
+
+    // Check for API key if premium model is selected
+    if (imageModel === 'gemini-3-pro-image-preview' || imageModel === 'gemini-3.1-flash-image-preview') {
+      const hasKey = await window.aistudio.hasSelectedApiKey();
+      if (!hasKey) {
+        await window.aistudio.openSelectKey();
+        // Proceeding after dialog open as per instructions
+      }
+    }
+
     setIsGeneratingImage(true);
     setImageError('');
     try {
         const prompt = `A ${character.race} ${character.class} who is a ${character.background}.`;
-        const imageUrl = await generateCharacterImage(prompt, character.name, referenceImageUrl);
+        const imageUrl = await generateCharacterImage(prompt, character.name, referenceImageUrl, imageModel);
         setCharacterImageUrl(imageUrl);
     } catch (err) {
         setImageError(err instanceof Error ? err.message : "알 수 없는 오류로 이미지 생성에 실패했습니다.");
@@ -156,7 +168,7 @@ const CharacterCreator: React.FC<CharacterCreatorProps> = ({ onCharacterCreate, 
       inventory: startingInventory,
       gold: selectedBackground?.startingGold || 0,
     };
-    onCharacterCreate(finalCharacter, useImageGeneration);
+    onCharacterCreate(finalCharacter, useImageGeneration, imageModel);
   };
   
   const handleAbilityChange = (ability: Ability, value: string) => {
@@ -273,6 +285,29 @@ const CharacterCreator: React.FC<CharacterCreatorProps> = ({ onCharacterCreate, 
                     <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-cyan-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
                   </label>
                 </div>
+
+                {useImageGeneration && (
+                  <div className="w-full mb-4 bg-gray-800 p-3 rounded-lg border border-gray-700">
+                    <h3 className="text-sm font-medium text-gray-300 mb-2">이미지 모델 선택</h3>
+                    <select 
+                      value={imageModel} 
+                      onChange={(e) => setImageModel(e.target.value as ImageModel)}
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-3 text-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    >
+                      <optgroup label="기본 모델 (무료)">
+                        <option value="gemini-2.5-flash-image">Gemini 2.5 Flash Image</option>
+                        <option value="imagen-4.0-generate-001">Imagen 4.0</option>
+                      </optgroup>
+                      <optgroup label="프리미엄 모델 (API 키 필요)">
+                        <option value="gemini-3-pro-image-preview">Nanabanana Pro (Gemini 3.0 Pro)</option>
+                        <option value="gemini-3.1-flash-image-preview">Nanabanana 2 (Gemini 3.1 Flash)</option>
+                      </optgroup>
+                    </select>
+                    {(imageModel === 'gemini-3-pro-image-preview' || imageModel === 'gemini-3.1-flash-image-preview') && (
+                      <p className="text-[10px] text-yellow-400 mt-1">※ 프리미엄 모델은 개인 API 키 설정이 필요합니다.</p>
+                    )}
+                  </div>
+                )}
 
                 {useImageGeneration && (
                   <>

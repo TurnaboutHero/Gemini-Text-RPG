@@ -165,6 +165,7 @@ export interface ChapterPlan {
   plotPoints: ChapterPlotPoint[];
   currentPlotPointIndex: number;
   locations: WorldMap;
+  mapImageUrl: string;
 }
 
 export enum SpecialActionType {
@@ -222,6 +223,9 @@ export interface GameState {
   combatState: CombatState | null;
   currentShop: { name: string; inventory: Item[] } | null;
   uiEffects: UiEffect[];
+  useImageGeneration: boolean;
+  locationImages: Record<string, string>;
+  entityImages: Record<string, string>;
 }
 
 type GeminiItem = {

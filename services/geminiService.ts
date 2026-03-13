@@ -210,7 +210,7 @@ const handleImageGenerationError = (error: unknown, context: string): Error => {
     return new Error(`${context} 이미지를 생성하지 못했습니다.`);
 };
 
-export const generateChapterPlan = async (character: Character, previousChapterSummaries: string[]): Promise<ChapterPlan> => {
+export const generateChapterPlan = async (character: Character, previousChapterSummaries: string[]): Promise<Omit<ChapterPlan, 'mapImageUrl'>> => {
     const MAX_RETRIES = 3;
     let lastError: string | null = null;
 
@@ -249,7 +249,7 @@ export const generateChapterPlan = async (character: Character, previousChapterS
             }
             
             const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: 'gemini-3-flash-preview',
                 contents: prompt,
                 config: {
                     systemInstruction: SYSTEM_INSTRUCTION_PLANNER,
@@ -336,7 +336,7 @@ export const generateChapterPlan = async (character: Character, previousChapterS
             exits: { "서쪽 공터": "fallback_start" }
         }
     };
-    const fallbackPlan: ChapterPlan = {
+    const fallbackPlan = {
         chapterTitle: "미지의 시작",
         overallGoal: "이 신비로운 숲을 탐험하고 무슨 일이 일어나고 있는지 알아내세요.",
         plotPoints: [
@@ -378,7 +378,7 @@ export const generateScene = async (
     try {
         const history = convertStoryLogToHistory(storyLog);
         const chat = ai.chats.create({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3-flash-preview',
             history: history,
             config: {
                 systemInstruction: SYSTEM_INSTRUCTION_INTERACTOR,
@@ -450,12 +450,13 @@ export const generateCombatTurnResult = async (
         `;
         
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3-flash-preview',
             contents: prompt,
             config: {
                 systemInstruction: SYSTEM_INSTRUCTION_COMBAT,
                 responseMimeType: "application/json",
                 responseSchema: combatResponseSchema,
+                thinkingConfig: { thinkingBudget: 0 },
             },
         });
         
@@ -483,7 +484,7 @@ const convertStoryLogToHistory = (storyLog: StoryLogEntry[]): Content[] => {
 export const summarizeText = async (text: string): Promise<string> => {
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3-flash-preview',
             contents: `다음 게임 로그를 한 문장의 흥미로운 요약으로 만들어주세요:\n\n---\n${text}\n---`,
         });
         return response.text.trim();
@@ -509,7 +510,7 @@ export const generateSummary = async (chapterSummaries: string[], storyLog: Stor
 
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3-flash-preview',
             contents: prompt,
         });
         return response.text.trim();
@@ -521,21 +522,68 @@ export const generateSummary = async (chapterSummaries: string[], storyLog: Stor
 
 export const generateInitialImage = async (prompt: string): Promise<string> => {
     try {
-        const response = await ai.models.generateImages({
-            model: 'imagen-4.0-generate-001',
-            prompt: `Epic fantasy adventure game screen, digital painting, atmospheric lighting, wide angle. ${prompt}`,
-            config: { numberOfImages: 1, outputMimeType: 'image/jpeg', aspectRatio: '16:9' },
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image',
+            contents: {
+                parts: [
+                    { text: `Epic fantasy adventure game screen, digital painting, atmospheric lighting, wide angle. ${prompt}` }
+                ]
+            },
+            config: {
+                imageConfig: {
+                    aspectRatio: "16:9"
+                }
+            }
         });
 
-        if (!response.generatedImages?.[0]?.image?.imageBytes) {
-            throw new Error("AI가 이미지를 반환하지 않았습니다.");
+        for (const part of response.candidates?.[0]?.content?.parts || []) {
+            if (part.inlineData) {
+                return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+            }
         }
-
-        return `data:image/jpeg;base64,${response.generatedImages[0].image.imageBytes}`;
+        throw new Error("AI가 이미지를 반환하지 않았습니다.");
     } catch (error) {
         throw handleImageGenerationError(error, "초기 장면");
     }
 };
+
+export const generateMapImage = async (worldMap: WorldMap): Promise<string> => {
+    try {
+        const locationDescriptions = Object.values(worldMap).map(loc => {
+            const exitInfo = Object.entries(loc.exits).map(([dir, destId]) => {
+                const destName = worldMap[destId]?.name || '알 수 없는 곳';
+                return `${dir} 방향으로 ${destName}(와)과 연결됨`;
+            }).join(', ');
+            return `"${loc.name}"(${loc.description}). ${exitInfo}.`;
+        }).join('\n');
+
+        const prompt = `Top-down fantasy world map, old parchment paper texture, hand-drawn style with intricate details, geographic elements like forests, mountains, rivers should be visible. The map illustrates the following connected locations:\n${locationDescriptions}\nEnsure all named locations are clearly visible and connected according to the description.`;
+        
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image',
+            contents: {
+                parts: [
+                    { text: prompt }
+                ]
+            },
+            config: {
+                imageConfig: {
+                    aspectRatio: "16:9"
+                }
+            }
+        });
+
+        for (const part of response.candidates?.[0]?.content?.parts || []) {
+            if (part.inlineData) {
+                return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+            }
+        }
+        throw new Error("AI가 지도 이미지를 반환하지 않았습니다.");
+    } catch (error) {
+        throw handleImageGenerationError(error, "월드맵");
+    }
+};
+
 
 export const generateCharacterImage = async (
     characterPrompt: string,
@@ -550,9 +598,13 @@ export const generateCharacterImage = async (
             const imagePart = { inlineData: { data: base64Data, mimeType: mimeType } };
             const textPart = { text: `이 이미지를 참고하여 서사적인 판타지 RPG 캐릭터 초상화를 만들어주세요. 캐릭터 설명: "${characterPrompt}". 참고 이미지의 스타일을 유지하면서 이 설명에 맞게 캐릭터를 그려주세요. 디지털 페인팅 스타일과 분위기 있는 조명을 사용해주세요.` };
             const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash-image-preview',
+                model: 'gemini-2.5-flash-image',
                 contents: { parts: [imagePart, textPart] },
-                config: { responseModalities: [Modality.IMAGE, Modality.TEXT] },
+                config: {
+                    imageConfig: {
+                        aspectRatio: "1:1"
+                    }
+                }
             });
             const parts = response?.candidates?.[0]?.content?.parts ?? [];
             for (const part of parts) {
@@ -563,17 +615,26 @@ export const generateCharacterImage = async (
             throw new Error("AI가 참고 이미지를 기반으로 이미지를 반환하지 않았습니다.");
         } else {
             const prompt = `Epic fantasy RPG character portrait, digital painting, detailed face. ${characterPrompt}. Centered, atmospheric lighting, high quality.`;
-            const response = await ai.models.generateImages({
-                model: 'imagen-4.0-generate-001',
-                prompt: prompt,
-                config: { numberOfImages: 1, outputMimeType: 'image/jpeg', aspectRatio: '1:1' },
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash-image',
+                contents: {
+                    parts: [
+                        { text: prompt }
+                    ]
+                },
+                config: {
+                    imageConfig: {
+                        aspectRatio: "1:1"
+                    }
+                }
             });
             
-            if (!response.generatedImages?.[0]?.image?.imageBytes) {
-                throw new Error("AI가 이미지를 반환하지 않았습니다.");
+            for (const part of response.candidates?.[0]?.content?.parts || []) {
+                if (part.inlineData) {
+                    return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+                }
             }
-
-            return `data:image/jpeg;base64,${response.generatedImages[0].image.imageBytes}`;
+            throw new Error("AI가 이미지를 반환하지 않았습니다.");
         }
     } catch (error) {
         throw handleImageGenerationError(error, `${characterName}의`);
@@ -585,9 +646,8 @@ export const editImage = async (prompt: string, base64ImageData: string): Promis
         const imagePart = { inlineData: { data: base64ImageData, mimeType: 'image/jpeg' } };
         const textPart = { text: `이 새로운 맥락에 맞게 이미지를 미묘하게 수정하세요: ${prompt}. 전체적인 스타일과 구성을 유지하면서 새로운 이야기의 흐름을 반영해주세요.` };
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash-image-preview',
+            model: 'gemini-2.5-flash-image',
             contents: { parts: [imagePart, textPart] },
-            config: { responseModalities: [Modality.IMAGE, Modality.TEXT] },
         });
         const parts = response?.candidates?.[0]?.content?.parts ?? [];
         for (const part of parts) {

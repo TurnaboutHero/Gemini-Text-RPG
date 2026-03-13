@@ -1,0 +1,304 @@
+import { useCallback, useRef } from 'react';
+import { GameState, Character, SpecialAction, StoryPartType, AiScenePart, UserStoryPart, SystemMessagePart } from '../types';
+import * as orchestrator from '../services/orchestratorService';
+import { generateInitialImage, editImage } from '../services/geminiService';
+import { audioService } from '../services/audioService';
+import { getInitialState } from './useGameState';
+
+export const useGameActions = (
+  gameState: GameState,
+  setGameState: React.Dispatch<React.SetStateAction<GameState>>,
+  addUiEffect: (text: string, color: string, elementId: string) => void,
+  handleNewGame: (setIsCharacterSheetOpen: (isOpen: boolean) => void) => void,
+  handleContinueGame: () => void,
+  setIsCharacterSheetOpen: (isOpen: boolean) => void
+) => {
+  const lastActionRef = useRef<(() => Promise<void>) | null>(null);
+
+  const handleAction = async (actionFn: () => Promise<void>) => {
+    lastActionRef.current = actionFn;
+    try {
+      await actionFn();
+    } catch (err) {
+      setGameState(prev => ({
+        ...prev,
+        isLoading: false,
+        error: err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.'
+      }));
+    }
+  };
+
+  const handleRetry = () => {
+    if (lastActionRef.current) {
+        handleAction(lastActionRef.current);
+    }
+  };
+
+  const processActionResult = useCallback(async (result: orchestrator.PlayerActionResult, previousImageUrl: string, useImageGeneration: boolean, currentLocationId: string | null, locationImages: Record<string, string>) => {
+    const { newScene, updatedCharacter, updatedPlan, systemMessages, updatedSummaries, updatedNpcs, updatedLocationId, updatedWorldMap, enemiesToBattle, shop, newEntityImages } = result;
+    
+    if (newScene.timeElapsed && newScene.timeElapsed > 0) {
+        systemMessages.push({
+            id: crypto.randomUUID(),
+            type: StoryPartType.SYSTEM_MESSAGE,
+            text: `${newScene.timeElapsed}시간이 흘렀습니다.`
+        });
+    }
+    
+    if (newScene.xpGained && newScene.xpGained > 0) {
+        addUiEffect(`+${newScene.xpGained} XP`, 'text-yellow-400', 'character-sheet-button');
+    }
+    if (newScene.goldChange) {
+        const text = `${newScene.goldChange > 0 ? '+' : ''}${newScene.goldChange} G`;
+        const color = newScene.goldChange > 0 ? 'text-yellow-400' : 'text-red-500';
+        addUiEffect(text, color, 'character-sheet-button');
+    }
+
+    const newStoryPartId = crypto.randomUUID();
+    const newStoryPart: AiScenePart = {
+      id: newStoryPartId,
+      type: StoryPartType.AI_SCENE,
+      content: newScene.content,
+      sceneTitle: newScene.sceneTitle,
+      imagePrompt: newScene.imagePrompt,
+      imageUrl: previousImageUrl,
+      isGeneratingImage: useImageGeneration && newScene.imageGenerationSetting !== 'NONE',
+      suggestedActions: newScene.suggestedActions,
+      skillCheck: newScene.skillCheck,
+      isChapterComplete: newScene.isChapterComplete,
+    };
+
+    setGameState(prev => {
+        let newTime = prev.currentTime;
+        let newDay = prev.currentDay;
+        if (newScene.timeElapsed && newScene.timeElapsed > 0) {
+            newTime += newScene.timeElapsed;
+            if (newTime >= 24) {
+                newDay += Math.floor(newTime / 24);
+                newTime = newTime % 24;
+            }
+        }
+
+        const firstLogEntry = prev.storyLog[0];
+        const newStoryLog = prev.storyLog.length > 0 && firstLogEntry.type === StoryPartType.AI_SCENE && firstLogEntry.sceneTitle === '...'
+            ? [newStoryPart, ...systemMessages]
+            // Filter out system messages from previous turn before adding new ones
+            : [...prev.storyLog.filter(p => p.type !== StoryPartType.SYSTEM_MESSAGE), newStoryPart, ...systemMessages];
+
+
+        return {
+            ...prev,
+            isLoading: false,
+            storyLog: newStoryLog,
+            character: updatedCharacter,
+            currentChapterPlan: updatedPlan,
+            suggestedActions: newScene.suggestedActions,
+            currentSkillCheck: newScene.skillCheck || null,
+            chapterSummaries: updatedSummaries,
+            npcs: updatedNpcs,
+            currentLocationId: updatedLocationId,
+            worldMap: updatedWorldMap,
+            currentTime: newTime,
+            currentDay: newDay,
+            currentShop: shop || null,
+            entityImages: newEntityImages,
+        };
+    });
+    
+    if (enemiesToBattle && enemiesToBattle.length > 0) {
+        setGameState(prev => ({
+            ...prev,
+            gamePhase: 'in_combat',
+            combatState: {
+                enemies: enemiesToBattle,
+                turn: 'player',
+                combatLog: [`${enemiesToBattle.map(e => e.name).join(', ')} (이)가 나타났다!`],
+                playerTargetId: enemiesToBattle[0].id,
+                skillCooldowns: {},
+            },
+            suggestedActions: [],
+        }));
+        setGameState(prev => ({
+            ...prev,
+            storyLog: prev.storyLog.map(p => p.id === newStoryPartId ? { ...p, isGeneratingImage: false } : p),
+        }));
+        audioService.playBgm('combat');
+        return;
+    }
+
+
+    if (newScene.skillCheck) {
+        setGameState(prev => ({
+            ...prev,
+            storyLog: prev.storyLog.map(p => p.id === newStoryPartId ? { ...p, isGeneratingImage: false } : p),
+        }));
+        return;
+    }
+    
+    let finalImageUrl = previousImageUrl;
+    let newLocationImages = { ...locationImages };
+    
+    if (useImageGeneration) {
+        const imageSetting = newScene.imageGenerationSetting || 'EDIT';
+        const base64Data = previousImageUrl.split(',')[1];
+
+        // Check if we moved to a new location and have a cached image
+        if (updatedLocationId && updatedLocationId !== currentLocationId && newLocationImages[updatedLocationId]) {
+             finalImageUrl = newLocationImages[updatedLocationId];
+        } else if (imageSetting === 'GENERATE' || (imageSetting === 'EDIT' && !base64Data)) {
+            finalImageUrl = await generateInitialImage(newScene.imagePrompt);
+            if (updatedLocationId) {
+                newLocationImages[updatedLocationId] = finalImageUrl;
+            }
+        } else if (imageSetting === 'EDIT' && base64Data) {
+            const editedImage = await editImage(newScene.imagePrompt, base64Data);
+            finalImageUrl = editedImage ?? previousImageUrl;
+            if (updatedLocationId) {
+                newLocationImages[updatedLocationId] = finalImageUrl;
+            }
+        }
+    }
+
+    setGameState(prev => ({
+      ...prev,
+      locationImages: newLocationImages,
+      storyLog: prev.storyLog.map(part =>
+        part.id === newStoryPartId
+          ? { ...part, imageUrl: finalImageUrl, isGeneratingImage: false }
+          : part
+      ),
+    }));
+  }, [addUiEffect, setGameState]);
+
+  const handleSendAction = (actionText: string) => {
+    if (!gameState.character || !gameState.currentChapterPlan || gameState.isLoading) return;
+    
+    const perform = async () => {
+      const currentState = (await new Promise<GameState>(resolve => setGameState(prev => { resolve(prev); return prev; })));
+
+      const userActionPart: UserStoryPart = { id: crypto.randomUUID(), type: StoryPartType.USER_ACTION, text: actionText };
+      
+      const lastAiPart = [...currentState.storyLog].reverse().find(p => p.type === StoryPartType.AI_SCENE) as AiScenePart | undefined;
+      const previousImageUrl = lastAiPart ? lastAiPart.imageUrl : '';
+      
+      setGameState(prev => ({ ...prev, isLoading: true, error: null, storyLog: [...prev.storyLog, userActionPart], suggestedActions: [], currentShop: null }));
+      
+      const result = await orchestrator.processPlayerAction(actionText, currentState.character!, currentState.storyLog, currentState.currentChapterPlan!, currentState.chapterSummaries, currentState.npcs, currentState.currentLocationId, currentState.worldMap, currentState.currentTime, currentState.currentDay, currentState.useImageGeneration, currentState.entityImages);
+      await processActionResult(result, previousImageUrl, currentState.useImageGeneration, currentState.currentLocationId, currentState.locationImages);
+    };
+    
+    handleAction(perform);
+  };
+
+  const handleCharacterCreate = async (character: Character, useImageGeneration: boolean) => {
+    // 1. Show loading screen immediately
+    setGameState({
+      ...getInitialState(),
+      character: character,
+      gamePhase: 'prologue',
+      isLoading: true,
+      error: null,
+      useImageGeneration: useImageGeneration,
+    });
+
+    try {
+        // 2. Get only the chapter plan (fast operation)
+        const { chapterPlan, initialLocationId, worldMap } = await orchestrator.initializeGame(character, useImageGeneration);
+
+        // 3. Set up the game state with a placeholder for the first scene
+        const placeholderScene: AiScenePart = {
+            id: crypto.randomUUID(),
+            type: StoryPartType.AI_SCENE,
+            content: [{ type: 'narration', text: '모험의 서막이 오르고 있습니다...' }],
+            sceneTitle: '...',
+            imagePrompt: '',
+            imageUrl: '',
+            isGeneratingImage: true,
+            suggestedActions: [],
+        };
+        
+        setGameState(prev => ({
+            ...prev,
+            storyLog: [placeholderScene],
+            isLoading: true, // Keep loading true for scene generation
+            currentChapterPlan: chapterPlan,
+            currentLocationId: initialLocationId,
+            worldMap: worldMap,
+        }));
+        
+        // 4. Now, asynchronously generate the first actual scene
+        const initialPrompt = `모험이 시작됩니다. 캐릭터 "${character.name}"는 이제 막 "${chapterPlan.chapterTitle}"에 들어섰습니다. 시작 장소는 "${chapterPlan.locations[initialLocationId]?.name}" 입니다. 이 챕터의 첫 장면을 묘사해주세요.`;
+        
+        // Use processPlayerAction to generate the scene and handle all side effects
+        const result = await orchestrator.processPlayerAction(initialPrompt, character, [], chapterPlan, [], {}, initialLocationId, worldMap, 8, 1, useImageGeneration, {});
+        
+        // 5. Process the result, which will replace the placeholder and generate images
+        await processActionResult(result, '', useImageGeneration, initialLocationId, {});
+        
+    } catch (err) {
+        setGameState(prev => ({
+            ...prev,
+            isLoading: false,
+            error: err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.',
+            gamePhase: 'character_creation',
+        }));
+    }
+  };
+
+  const handleContinueToGame = () => {
+      setGameState(prev => ({ ...prev, gamePhase: 'in_game' }));
+      audioService.playBgm('adventure');
+  };
+
+  const handleExecuteSpecialAction = (action: SpecialAction) => {
+    if (!gameState.character || !gameState.currentChapterPlan || gameState.isLoading) return;
+    
+    const perform = async () => {
+      const currentState = (await new Promise<GameState>(resolve => setGameState(prev => { resolve(prev); return prev; })));
+
+      setGameState(p => ({ ...p, isActionMenuOpen: false, isLoading: true, error: null, suggestedActions: [], currentShop: null }));
+      
+      const lastAiPart = [...currentState.storyLog].reverse().find(p => p.type === StoryPartType.AI_SCENE) as AiScenePart | undefined;
+      const previousImageUrl = lastAiPart ? lastAiPart.imageUrl : '';
+      const result = await orchestrator.executeSpecialAction(action, currentState.character!, currentState.storyLog, currentState.currentChapterPlan!, currentState.chapterSummaries, currentState.npcs, currentState.currentLocationId, currentState.worldMap, currentState.currentTime, currentState.currentDay, currentState.useImageGeneration, currentState.entityImages);
+
+      if ('summaryMessage' in result) {
+        setGameState(p => ({ ...p, storyLog: [...p.storyLog, result.summaryMessage], isLoading: false }));
+      } else if ('actionResult' in result) {
+        await processActionResult(result.actionResult, previousImageUrl, currentState.useImageGeneration, currentState.currentLocationId, currentState.locationImages);
+      }
+    };
+    
+    handleAction(perform);
+  };
+
+  const handleRollSkillCheck = () => {
+    if (!gameState.character || !gameState.currentSkillCheck) return;
+    const { ability, difficulty } = gameState.currentSkillCheck;
+    const score = gameState.character.abilityScores[ability] || 10;
+    const modifier = Math.floor((score - 10) / 2);
+    const d20Roll = Math.floor(Math.random() * 20) + 1;
+    const total = d20Roll + modifier;
+    const resultText = `주사위 굴림: ${d20Roll} + ${modifier} (${ability}) = 총 ${total} (난이도: ${difficulty})`;
+    const systemMessage: SystemMessagePart = { id: crypto.randomUUID(), type: StoryPartType.SYSTEM_MESSAGE, text: resultText };
+    setGameState(prev => ({ ...prev, storyLog: [...prev.storyLog, systemMessage], currentSkillCheck: null }));
+    let outcome = d20Roll === 1 ? '대실패' : d20Roll === 20 ? '대성공' : total >= difficulty ? '성공' : '실패';
+    const outcomeMessage = `판정 결과: '${outcome}'. 내 캐릭터가 ${ability} 판정을 시도했고, 결과는 이러했습니다. 이 결과에 따른 이야기를 계속해주세요.`;
+    handleSendAction(outcomeMessage);
+  };
+
+  const handleRestartFromDefeat = () => {
+    handleContinueGame(); // Re-load last saved state
+  };
+
+  return {
+    handleSendAction,
+    handleCharacterCreate,
+    handleContinueToGame,
+    handleExecuteSpecialAction,
+    handleRollSkillCheck,
+    handleRestartFromDefeat,
+    handleRetry,
+    lastActionRef
+  };
+};

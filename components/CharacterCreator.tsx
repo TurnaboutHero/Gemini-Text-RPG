@@ -5,10 +5,11 @@ import { generateCharacterImage } from '../services/geminiService';
 import LoadingSpinner from './LoadingSpinner';
 
 interface CharacterCreatorProps {
-  onCharacterCreate: (character: Character) => Promise<void>;
+  onCharacterCreate: (character: Character, useImageGeneration: boolean) => Promise<void>;
+  initialUseImageGeneration: boolean;
 }
 
-const CharacterCreator: React.FC<CharacterCreatorProps> = ({ onCharacterCreate }) => {
+const CharacterCreator: React.FC<CharacterCreatorProps> = ({ onCharacterCreate, initialUseImageGeneration }) => {
   const [step, setStep] = useState(1);
   const totalSteps = 5;
 
@@ -29,6 +30,7 @@ const CharacterCreator: React.FC<CharacterCreatorProps> = ({ onCharacterCreate }
   const [imageError, setImageError] = useState('');
   const [referenceImageFile, setReferenceImageFile] = useState<File | null>(null);
   const [referenceImageUrl, setReferenceImageUrl] = useState<string | null>(null);
+  const [useImageGeneration, setUseImageGeneration] = useState(initialUseImageGeneration);
 
   const racialBonuses = useMemo(() => {
     const raceData = RACES.find(r => r.name === character.race);
@@ -83,10 +85,10 @@ const CharacterCreator: React.FC<CharacterCreatorProps> = ({ onCharacterCreate }
       case 2: return character.class !== '';
       case 3: return character.background !== '';
       case 4: return assignedBaseScores.length === 6;
-      case 5: return character.name.trim() !== '' && characterImageUrl !== '';
+      case 5: return character.name.trim() !== '' && (!useImageGeneration || characterImageUrl !== '');
       default: return false;
     }
-  }, [step, character, assignedBaseScores, characterImageUrl]);
+  }, [step, character, assignedBaseScores, characterImageUrl, useImageGeneration]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -154,7 +156,7 @@ const CharacterCreator: React.FC<CharacterCreatorProps> = ({ onCharacterCreate }
       inventory: startingInventory,
       gold: selectedBackground?.startingGold || 0,
     };
-    onCharacterCreate(finalCharacter);
+    onCharacterCreate(finalCharacter, useImageGeneration);
   };
   
   const handleAbilityChange = (ability: Ability, value: string) => {
@@ -261,45 +263,66 @@ const CharacterCreator: React.FC<CharacterCreatorProps> = ({ onCharacterCreate }
         <h2 className="text-2xl font-bold text-cyan-300 font-adventure tracking-wider text-center mb-6">캐릭터 완성</h2>
         <div className="flex flex-col md:flex-row gap-6">
             <div className="md:w-1/3 flex flex-col items-center">
-                <h3 className="text-lg font-semibold text-gray-300 mb-2">생성된 초상화</h3>
-                <div className="w-48 h-48 bg-gray-700 rounded-lg flex items-center justify-center mb-4 overflow-hidden">
-                    {isGeneratingImage ? (
-                        <LoadingSpinner />
-                    ) : characterImageUrl ? (
-                        <img src={characterImageUrl} alt="Character Portrait" className="w-full h-full object-cover" />
-                    ) : (
-                        <span className="text-gray-400 text-sm text-center">초상화를 생성하세요</span>
-                    )}
+                <div className="w-full flex items-center justify-between mb-4 bg-gray-800 p-3 rounded-lg border border-gray-700">
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-300">AI 일러스트 생성</h3>
+                    <p className="text-xs text-gray-500 mt-1">API 호출량 절약을 위해 끌 수 있습니다.</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" checked={useImageGeneration} onChange={() => setUseImageGeneration(!useImageGeneration)} />
+                    <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-cyan-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
+                  </label>
                 </div>
 
-                <h3 className="text-lg font-semibold text-gray-300 mb-2">참고 이미지 (선택)</h3>
-                <div className="w-48 h-48 bg-gray-700 rounded-lg flex items-center justify-center mb-2 overflow-hidden border-2 border-dashed border-gray-500">
-                    {referenceImageUrl ? (
-                        <img src={referenceImageUrl} alt="Reference Preview" className="w-full h-full object-cover" />
-                    ) : (
-                        <span className="text-gray-400 text-sm text-center p-2">캐릭터, 의상, 무기 등 참고 이미지를 첨부하세요.</span>
-                    )}
-                </div>
-                 <input
-                    id="image-upload"
-                    type="file"
-                    accept="image/png, image/jpeg, image/webp"
-                    onChange={handleImageUpload}
-                    className="hidden"
-                />
-                <label htmlFor="image-upload" className="bg-gray-600 text-white font-bold rounded-lg py-2 px-4 w-full hover:bg-gray-500 transition-colors cursor-pointer text-center text-sm mb-4">
-                    이미지 업로드
-                </label>
-                
-                <button 
-                    type="button" 
-                    onClick={handleGenerateImage}
-                    disabled={isGeneratingImage || character.name.trim() === ''}
-                    className="bg-purple-600 text-white font-bold rounded-lg py-2 px-4 w-full hover:bg-purple-500 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed">
-                    {isGeneratingImage ? "생성 중..." : "캐릭터 초상화 생성"}
-                </button>
-                {imageError && <p className="text-red-400 text-xs mt-2">{imageError}</p>}
-                 <p className="text-xs text-gray-500 mt-2">이름을 입력해야 생성이 가능합니다.</p>
+                {useImageGeneration && (
+                  <>
+                    <h3 className="text-lg font-semibold text-gray-300 mb-2">생성된 초상화</h3>
+                    <div className="w-48 h-48 bg-gray-700 rounded-lg flex items-center justify-center mb-4 overflow-hidden">
+                        {isGeneratingImage ? (
+                            <LoadingSpinner />
+                        ) : characterImageUrl ? (
+                            <img src={characterImageUrl} alt="Character Portrait" className="w-full h-full object-cover" />
+                        ) : (
+                            <span className="text-gray-400 text-sm text-center">초상화를 생성하세요</span>
+                        )}
+                    </div>
+
+                    <h3 className="text-lg font-semibold text-gray-300 mb-2">참고 이미지 (선택)</h3>
+                    <div className="w-48 h-48 bg-gray-700 rounded-lg flex items-center justify-center mb-2 overflow-hidden border-2 border-dashed border-gray-500">
+                        {referenceImageUrl ? (
+                            <img src={referenceImageUrl} alt="Reference Preview" className="w-full h-full object-cover" />
+                        ) : (
+                            <span className="text-gray-400 text-sm text-center p-2">캐릭터, 의상, 무기 등 참고 이미지를 첨부하세요.</span>
+                        )}
+                    </div>
+                     <input
+                        id="image-upload"
+                        type="file"
+                        accept="image/png, image/jpeg, image/webp"
+                        onChange={handleImageUpload}
+                        className="hidden"
+                    />
+                    <label htmlFor="image-upload" className="bg-gray-600 text-white font-bold rounded-lg py-2 px-4 w-full hover:bg-gray-500 transition-colors cursor-pointer text-center text-sm mb-4">
+                        이미지 업로드
+                    </label>
+                    
+                    <button 
+                        type="button" 
+                        onClick={handleGenerateImage}
+                        disabled={isGeneratingImage || character.name.trim() === ''}
+                        className="bg-purple-600 text-white font-bold rounded-lg py-2 px-4 w-full hover:bg-purple-500 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed">
+                        {isGeneratingImage ? "생성 중..." : "캐릭터 초상화 생성"}
+                    </button>
+                    {imageError && <p className="text-red-400 text-xs mt-2">{imageError}</p>}
+                     <p className="text-xs text-gray-500 mt-2">이름을 입력해야 생성이 가능합니다.</p>
+                  </>
+                )}
+                {!useImageGeneration && (
+                  <div className="w-48 h-48 bg-gray-800 rounded-lg flex flex-col items-center justify-center border border-gray-700 mt-4">
+                    <svg className="w-12 h-12 text-gray-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                    <span className="text-gray-500 text-sm text-center">이미지 생성 건너뜀</span>
+                  </div>
+                )}
             </div>
             <div className="md:w-2/3 space-y-4">
                 <div>

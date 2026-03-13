@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
-import { FaMapMarkerAlt, FaSun, FaMoon, FaCloudSun, FaCloudMoon, FaBook } from 'react-icons/fa';
+import { FaMapMarkerAlt, FaSun, FaMoon, FaCloudSun, FaCloudMoon, FaBook, FaMap, FaImage } from 'react-icons/fa';
 
 interface HeaderProps {
   locationName: string;
   currentDay: number;
   currentTime: number;
+  useImageGeneration: boolean;
   onOpenQuestLog: () => void;
+  onOpenMap: () => void;
+  onToggleImageGeneration: () => void;
 }
 
 const getTimeInfo = (hour: number): { period: string; icon: JSX.Element } => {
@@ -15,7 +18,7 @@ const getTimeInfo = (hour: number): { period: string; icon: JSX.Element } => {
     return { period: '밤', icon: <FaMoon className="text-indigo-400" /> };
 };
 
-const Header: React.FC<HeaderProps> = ({ locationName, currentDay, currentTime, onOpenQuestLog }) => {
+const Header: React.FC<HeaderProps> = ({ locationName, currentDay, currentTime, useImageGeneration, onOpenQuestLog, onOpenMap, onToggleImageGeneration }) => {
     const { period, icon } = getTimeInfo(currentTime);
 
     return (
@@ -32,11 +35,26 @@ const Header: React.FC<HeaderProps> = ({ locationName, currentDay, currentTime, 
                 </div>
                 <div className="flex items-center">
                   <button
+                    onClick={onToggleImageGeneration}
+                    className={`p-2 transition-colors ${useImageGeneration ? 'text-green-400 hover:text-green-300' : 'text-gray-500 hover:text-gray-400'}`}
+                    title={useImageGeneration ? "배경 이미지 생성 켜짐" : "배경 이미지 생성 꺼짐"}
+                    aria-label="이미지 생성 토글"
+                  >
+                    <FaImage className="w-5 h-5"/>
+                  </button>
+                  <button
                     onClick={onOpenQuestLog}
                     className="p-2 text-gray-400 hover:text-white transition-colors"
                     aria-label="임무 일지 열기"
                   >
                     <FaBook className="w-5 h-5"/>
+                  </button>
+                  <button
+                    onClick={onOpenMap}
+                    className="p-2 text-gray-400 hover:text-white transition-colors"
+                    aria-label="월드맵 열기"
+                  >
+                    <FaMap className="w-5 h-5"/>
                   </button>
                 </div>
             </div>

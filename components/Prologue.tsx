@@ -104,7 +104,13 @@ const Prologue: React.FC<PrologueProps> = ({ character, prologue, onContinue }) 
        {/* Character Info Overlay */}
        <div className="absolute bottom-4 left-4 z-30 fade-in">
           <div className="flex gap-4 items-center bg-black/50 backdrop-blur-sm p-3 rounded-lg border border-gray-700">
-              <img src={character.imageUrl} alt={character.name} className="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover border-2 border-gray-500"/>
+              {character.imageUrl ? (
+                  <img src={character.imageUrl} alt={character.name} className="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover border-2 border-gray-500"/>
+              ) : (
+                  <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-gray-600 flex items-center justify-center text-gray-300 font-bold text-2xl border-2 border-gray-500">
+                      {character.name.substring(0, 1)}
+                  </div>
+              )}
               <div>
                   <p className="text-lg font-bold text-cyan-300">{character.name}</p>
                   <p className="text-sm text-gray-400">{character.race} {character.class}</p>

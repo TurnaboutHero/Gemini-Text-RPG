@@ -1,15 +1,15 @@
-import { generateChapterPlan, generateScene, summarizeText, generateCharacterImage, generateSummary, generateCombatTurnResult } from './geminiService';
-import { Character, ChapterPlan, GeminiResponse, StoryLogEntry, Item, SystemMessagePart, StoryPartType, AiScenePart, Npc, ContentBlock, SpecialAction, SpecialActionType, WorldMap, Enemy, Skill, CombatState, GeminiCombatResponse } from '../types';
-import { CLASSES } from '../dndData';
+import { generateChapterPlan, generateScene, summarizeText, generateCharacterImage, generateSummary, generateCombatTurnResult, generateMapImage } from './geminiService';
+import { Character, ChapterPlan, GeminiResponse, StoryLogEntry, Item, SystemMessagePart, StoryPartType, AiScenePart, Npc, SpecialAction, SpecialActionType, WorldMap, Enemy, CombatState, GeminiCombatResponse } from '../types';
+import { processStateChanges } from './stateManagerService';
 
-export const initializeGame = async (character: Character): Promise<{
+export const initializeGame = async (character: Character, useImageGeneration: boolean): Promise<{
   chapterPlan: ChapterPlan;
   initialLocationId: string;
   worldMap: WorldMap;
 }> => {
-  const chapterPlan = await generateChapterPlan(character, []);
+  const planData = await generateChapterPlan(character, []);
   
-  const locations = chapterPlan?.locations;
+  const locations = planData?.locations;
   const locationIds = locations ? Object.keys(locations) : [];
 
   // More robust check: ensure there is at least one valid location with a name.
@@ -17,11 +17,17 @@ export const initializeGame = async (character: Character): Promise<{
       throw new Error("AI가 생성한 챕터 계획에 유효한 시작 장소가 없습니다. 다시 시도해 주세요.");
   }
 
+  const mapImageUrl = useImageGeneration ? await generateMapImage(planData.locations) : '';
+
+  const chapterPlan: ChapterPlan = {
+      ...planData,
+      mapImageUrl: mapImageUrl,
+  };
+
   const initialLocationId = locationIds[0];
   return { chapterPlan, initialLocationId, worldMap: chapterPlan.locations };
 };
 
-// FIX: Export PlayerActionResult type to be used in App.tsx
 export type PlayerActionResult = Awaited<ReturnType<typeof processPlayerAction>>;
 
 export const executeSpecialAction = async (
@@ -34,7 +40,9 @@ export const executeSpecialAction = async (
   currentLocationId: string | null,
   worldMap: WorldMap | null,
   currentTime: number,
-  currentDay: number
+  currentDay: number,
+  useImageGeneration: boolean,
+  entityImages: Record<string, string> = {}
 ): Promise<{ summaryMessage: SystemMessagePart } | { actionResult: PlayerActionResult }> => {
     switch (action.type) {
         case SpecialActionType.SUMMARY:
@@ -48,16 +56,16 @@ export const executeSpecialAction = async (
 
         case SpecialActionType.TALK_TO_NPC:
             if (!action.payload) throw new Error("대화할 NPC가 지정되지 않았습니다.");
-            const talkActionText = `${action.payload}에게 말을 건다.`;
+            const talkActionText = `"${action.payload}에게 말을 건다."`;
             return { 
-                actionResult: await processPlayerAction(talkActionText, character, storyLog, currentPlan, chapterSummaries, currentNpcs, currentLocationId, worldMap, currentTime, currentDay) 
+                actionResult: await processPlayerAction(talkActionText, character, storyLog, currentPlan, chapterSummaries, currentNpcs, currentLocationId, worldMap, currentTime, currentDay, useImageGeneration, entityImages) 
             };
 
         case SpecialActionType.USE_ITEM:
             if (!action.payload) throw new Error("사용할 아이템이 지정되지 않았습니다.");
-            const useItemActionText = `${action.payload}을(를) 사용한다.`;
+            const useItemActionText = `"${action.payload}을(를) 사용한다."`;
              return { 
-                actionResult: await processPlayerAction(useItemActionText, character, storyLog, currentPlan, chapterSummaries, currentNpcs, currentLocationId, worldMap, currentTime, currentDay) 
+                actionResult: await processPlayerAction(useItemActionText, character, storyLog, currentPlan, chapterSummaries, currentNpcs, currentLocationId, worldMap, currentTime, currentDay, useImageGeneration, entityImages) 
             };
 
         default:
@@ -75,7 +83,9 @@ export const processPlayerAction = async (
   currentLocationId: string | null,
   worldMap: WorldMap | null,
   currentTime: number,
-  currentDay: number
+  currentDay: number,
+  useImageGeneration: boolean,
+  entityImages: Record<string, string> = {}
 ): Promise<{
   newScene: GeminiResponse;
   updatedCharacter: Character;
@@ -87,6 +97,7 @@ export const processPlayerAction = async (
   updatedWorldMap: WorldMap | null;
   enemiesToBattle?: Enemy[];
   shop?: { name: string; inventory: Item[] } | null;
+  newEntityImages: Record<string, string>;
 }> => {
   let plan = { ...currentPlan };
   let currentCharacter = { ...character };
@@ -133,14 +144,17 @@ export const processPlayerAction = async (
           systemMessages.push({ id: crypto.randomUUID(), type: StoryPartType.SYSTEM_MESSAGE, text: `지난 챕터 요약: ${summary}` });
       }
 
-      plan = await generateChapterPlan(character, updatedSummaries);
+      const planData = await generateChapterPlan(character, updatedSummaries);
+      const mapImageUrl = useImageGeneration ? await generateMapImage(planData.locations) : '';
+      plan = { ...planData, mapImageUrl };
+      
       updatedWorldMap = plan.locations;
       updatedLocationId = Object.keys(updatedWorldMap)[0]; // Start at the first location of the new chapter
   }
 
   const newScene = await generateScene(character, storyLog, actionText, plan, updatedNpcs, updatedLocationId, updatedWorldMap, currentTime, currentDay);
   
-  const newNpcs = await processNewNpcs(newScene);
+  const { npcs: newNpcs, newEntityImages: updatedEntityImages1 } = await processNewNpcs(newScene, useImageGeneration, entityImages);
   updatedNpcs = { ...updatedNpcs, ...newNpcs };
   
   let shop: { name: string; inventory: Item[] } | null = null;
@@ -154,13 +168,22 @@ export const processPlayerAction = async (
       };
   }
 
+  let newEntityImages = { ...updatedEntityImages1 };
   let enemiesToBattle: Enemy[] | undefined = undefined;
   if (newScene.enterCombat && newScene.enterCombat.length > 0) {
       systemMessages.push({ id: crypto.randomUUID(), type: StoryPartType.SYSTEM_MESSAGE, text: `전투 시작!` });
       enemiesToBattle = [];
       for (const enemyData of newScene.enterCombat) {
           try {
-              const imageUrl = await generateCharacterImage(enemyData.imagePrompt, enemyData.name);
+              let imageUrl = '';
+              if (useImageGeneration) {
+                  if (newEntityImages[enemyData.name]) {
+                      imageUrl = newEntityImages[enemyData.name];
+                  } else {
+                      imageUrl = await generateCharacterImage(enemyData.imagePrompt, enemyData.name);
+                      newEntityImages[enemyData.name] = imageUrl;
+                  }
+              }
               enemiesToBattle.push({
                   id: crypto.randomUUID(),
                   name: enemyData.name,
@@ -211,7 +234,7 @@ export const processPlayerAction = async (
     }
   }
 
-  return { newScene, updatedCharacter: currentCharacter, updatedPlan: plan, systemMessages, updatedSummaries, updatedNpcs, updatedLocationId, updatedWorldMap, enemiesToBattle, shop };
+  return { newScene, updatedCharacter: currentCharacter, updatedPlan: plan, systemMessages, updatedSummaries, updatedNpcs, updatedLocationId, updatedWorldMap, enemiesToBattle, shop, newEntityImages };
 };
 
 export const processPlayerCombatAction = async (
@@ -223,14 +246,23 @@ export const processPlayerCombatAction = async (
     return result;
 };
 
-const processNewNpcs = async (scene: GeminiResponse): Promise<Record<string, Npc>> => {
+const processNewNpcs = async (scene: GeminiResponse, useImageGeneration: boolean, entityImages: Record<string, string>): Promise<{ npcs: Record<string, Npc>, newEntityImages: Record<string, string> }> => {
     const npcs: Record<string, Npc> = {};
+    let newEntityImages = { ...entityImages };
     if (!scene.newNpcs) {
-        return npcs;
+        return { npcs, newEntityImages };
     }
     const npcImagePromises = scene.newNpcs.map(async (npcData) => {
         try {
-            const imageUrl = await generateCharacterImage(npcData.imagePrompt, npcData.name);
+            let imageUrl = '';
+            if (useImageGeneration) {
+                if (newEntityImages[npcData.name]) {
+                    imageUrl = newEntityImages[npcData.name];
+                } else {
+                    imageUrl = await generateCharacterImage(npcData.imagePrompt, npcData.name);
+                    newEntityImages[npcData.name] = imageUrl;
+                }
+            }
             return {
                 name: npcData.name,
                 data: {
@@ -258,82 +290,5 @@ const processNewNpcs = async (scene: GeminiResponse): Promise<Record<string, Npc
     for (const result of results) {
         npcs[result.name] = result.data;
     }
-    return npcs;
-};
-
-const processStateChanges = (
-  character: Character,
-  response: GeminiResponse
-): { updatedCharacter: Character; systemMessages: SystemMessagePart[] } => {
-  let updatedCharacter = { ...character };
-  const systemMessages: SystemMessagePart[] = [];
-
-  if (response.goldChange) {
-    updatedCharacter.gold += response.goldChange;
-    const changeText = response.goldChange > 0 ? `획득: +${response.goldChange} G` : `소비: ${response.goldChange} G`;
-    systemMessages.push({ id: crypto.randomUUID(), type: StoryPartType.SYSTEM_MESSAGE, text: `골드 변경: ${changeText}` });
-  }
-
-  if (response.hpChange) {
-    const oldHp = updatedCharacter.hp;
-    const newHp = Math.max(0, Math.min(updatedCharacter.maxHp, oldHp + response.hpChange));
-    updatedCharacter.hp = newHp;
-    const changeText = response.hpChange > 0 ? `${response.hpChange} HP 회복` : `${Math.abs(response.hpChange)} 피해`;
-    systemMessages.push({ id: crypto.randomUUID(), type: StoryPartType.SYSTEM_MESSAGE, text: `체력 변경: ${changeText}` });
-  }
-
-  if (response.statusEffect) {
-      if (response.statusEffect.type === 'add' && !updatedCharacter.statusEffects.includes(response.statusEffect.name)) {
-          updatedCharacter.statusEffects.push(response.statusEffect.name);
-          systemMessages.push({ id: crypto.randomUUID(), type: StoryPartType.SYSTEM_MESSAGE, text: `상태 이상 발생: ${response.statusEffect.name}` });
-      } else if (response.statusEffect.type === 'remove') {
-          updatedCharacter.statusEffects = updatedCharacter.statusEffects.filter(e => e !== response.statusEffect.name);
-          systemMessages.push({ id: crypto.randomUUID(), type: StoryPartType.SYSTEM_MESSAGE, text: `상태 이상 해제: ${response.statusEffect.name}` });
-      }
-  }
-  
-  if (response.itemsGained && response.itemsGained.length > 0) {
-      const newItems: Item[] = response.itemsGained.map(itemData => ({
-        ...itemData,
-        id: crypto.randomUUID(),
-      }));
-      updatedCharacter.inventory = [...updatedCharacter.inventory, ...newItems];
-      const itemNames = newItems.map(i => i.name).join(', ');
-      systemMessages.push({ id: crypto.randomUUID(), type: StoryPartType.SYSTEM_MESSAGE, text: `아이템 획득: ${itemNames}` });
-  }
-  
-  if (response.itemsLost && response.itemsLost.length > 0) {
-    updatedCharacter.inventory = updatedCharacter.inventory.filter(item => !response.itemsLost?.includes(item.name));
-    systemMessages.push({ id: crypto.randomUUID(), type: StoryPartType.SYSTEM_MESSAGE, text: `아이템 상실: ${response.itemsLost.join(', ')}` });
-  }
-
-  if (response.skillLearned) {
-      const newSkill: Skill = {
-          ...response.skillLearned,
-          id: crypto.randomUUID(),
-      };
-      if (!updatedCharacter.skills.some(s => s.name === newSkill.name)) {
-        updatedCharacter.skills = [...updatedCharacter.skills, newSkill];
-        systemMessages.push({ id: crypto.randomUUID(), type: StoryPartType.SYSTEM_MESSAGE, text: `새로운 스킬 습득: ${newSkill.name}!` });
-      }
-  }
-  
-  if (response.xpGained && response.xpGained > 0) {
-    updatedCharacter.xp += response.xpGained;
-    systemMessages.push({ id: crypto.randomUUID(), type: StoryPartType.SYSTEM_MESSAGE, text: `경험치 획득: +${response.xpGained} XP` });
-
-    if (updatedCharacter.xp >= updatedCharacter.xpToNextLevel) {
-      updatedCharacter.level += 1;
-      updatedCharacter.xp -= updatedCharacter.xpToNextLevel;
-      updatedCharacter.xpToNextLevel = Math.floor(updatedCharacter.xpToNextLevel * 1.5);
-      const selectedClass = CLASSES.find(c => c.name === updatedCharacter.class);
-      const healthModifier = Math.floor((updatedCharacter.abilityScores['건강'] - 10) / 2);
-      const hpGain = (selectedClass?.baseHp || 8) / 2 + healthModifier;
-      updatedCharacter.maxHp += Math.max(1, Math.floor(hpGain));
-      updatedCharacter.hp = updatedCharacter.maxHp;
-      systemMessages.push({ id: crypto.randomUUID(), type: StoryPartType.SYSTEM_MESSAGE, text: `레벨 업! LV ${updatedCharacter.level} 달성!` });
-    }
-  }
-
-  return { updatedCharacter, systemMessages };
+    return { npcs, newEntityImages };
 };

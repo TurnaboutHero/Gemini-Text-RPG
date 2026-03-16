@@ -249,7 +249,7 @@ export const generateChapterPlan = async (character: Character, previousChapterS
             }
             
             const response = await ai.models.generateContent({
-                model: 'gemini-3-flash-preview',
+                model: 'gemini-3.1-pro-preview',
                 contents: prompt,
                 config: {
                     systemInstruction: SYSTEM_INSTRUCTION_PLANNER,
@@ -378,7 +378,7 @@ export const generateScene = async (
     try {
         const history = convertStoryLogToHistory(storyLog);
         const chat = ai.chats.create({
-            model: 'gemini-3-flash-preview',
+            model: 'gemini-3.1-flash-preview',
             history: history,
             config: {
                 systemInstruction: SYSTEM_INSTRUCTION_INTERACTOR,
@@ -450,7 +450,7 @@ export const generateCombatTurnResult = async (
         `;
         
         const response = await ai.models.generateContent({
-            model: 'gemini-3-flash-preview',
+            model: 'gemini-3.1-flash-preview',
             contents: prompt,
             config: {
                 systemInstruction: SYSTEM_INSTRUCTION_COMBAT,
@@ -484,7 +484,7 @@ const convertStoryLogToHistory = (storyLog: StoryLogEntry[]): Content[] => {
 export const summarizeText = async (text: string): Promise<string> => {
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-3-flash-preview',
+            model: 'gemini-3.1-flash-preview',
             contents: `다음 게임 로그를 한 문장의 흥미로운 요약으로 만들어주세요:\n\n---\n${text}\n---`,
         });
         return response.text.trim();
@@ -510,7 +510,7 @@ export const generateSummary = async (chapterSummaries: string[], storyLog: Stor
 
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-3-flash-preview',
+            model: 'gemini-3.1-flash-preview',
             contents: prompt,
         });
         return response.text.trim();

@@ -80,7 +80,7 @@ export interface Npc {
 export interface AiScenePart {
   id: string;
   type: StoryPartType.AI_SCENE;
-  content: ContentBlock[];
+  text: string;
   sceneTitle: string;
   imagePrompt: string;
   imageUrl: string;
@@ -244,7 +244,7 @@ type GeminiItem = {
 export interface GeminiResponse {
   sceneTitle: string;
   imagePrompt: string;
-  content: ContentBlock[];
+  text?: string;
   suggestedActions: string[];
   skillCheck?: SkillCheck;
   xpGained?: number;

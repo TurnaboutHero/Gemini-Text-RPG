@@ -11,7 +11,7 @@ interface HeaderProps {
   onToggleImageGeneration: () => void;
 }
 
-const getTimeInfo = (hour: number): { period: string; icon: JSX.Element } => {
+const getTimeInfo = (hour: number): { period: string; icon: React.ReactNode } => {
     if (hour >= 5 && hour < 12) return { period: '아침', icon: <FaCloudSun className="text-yellow-300" /> };
     if (hour >= 12 && hour < 18) return { period: '낮', icon: <FaSun className="text-yellow-400" /> };
     if (hour >= 18 && hour < 22) return { period: '저녁', icon: <FaCloudMoon className="text-indigo-300" /> };

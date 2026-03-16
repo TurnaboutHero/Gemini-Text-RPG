@@ -46,7 +46,7 @@ interface PrologueProps {
 }
 
 const Prologue: React.FC<PrologueProps> = ({ character, prologue, onContinue }) => {
-  const prologueText = prologue.content.length > 0 && 'text' in prologue.content[0] ? prologue.content[0].text : '';
+  const prologueText = prologue.text || '';
   const { displayText, isFinished, skip } = useTypewriter(prologueText, 40, !prologue.isGeneratingImage);
 
   return (

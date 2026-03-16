@@ -8,7 +8,7 @@ interface InventoryProps {
     onUnequipItem: (slot: ItemSlot) => void;
 }
 
-const slotIcons: Record<ItemSlot, JSX.Element> = {
+const slotIcons: Record<ItemSlot, React.ReactNode> = {
     mainHand: <FaHandPaper />,
     offHand: <FaShieldAlt />,
     armor: <FaTshirt />,

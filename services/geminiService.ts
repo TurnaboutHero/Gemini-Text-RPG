@@ -1,7 +1,7 @@
 
 
 import { GoogleGenAI, Chat, Type, Modality, Content } from "@google/genai";
-import { GeminiResponse, Character, StoryLogEntry, StoryPartType, AiScenePart, ChapterPlan, ContentBlock, Npc, WorldMap, ItemSlot, ItemType, Ability, CombatState, GeminiCombatResponse } from '../types';
+import { GeminiResponse, Character, StoryLogEntry, StoryPartType, AiScenePart, ChapterPlan, ContentBlock, Npc, WorldMap, ItemSlot, ItemType, Ability, CombatState, GeminiCombatResponse, ImageModel } from '../types';
 import { SYSTEM_INSTRUCTION_INTERACTOR, SYSTEM_INSTRUCTION_PLANNER, SYSTEM_INSTRUCTION_COMBAT } from "../scenarioData";
 
 if (!process.env.API_KEY) {
@@ -9,34 +9,6 @@ if (!process.env.API_KEY) {
 }
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
-const contentBlockSchema = {
-    type: Type.OBJECT,
-    properties: {
-        type: { type: Type.STRING, enum: ['narration', 'dialogue', 'thought', 'action'] },
-        text: { type: Type.STRING, nullable: true, description: "서술, 생각, 또는 행동 텍스트." },
-        characterName: { type: Type.STRING, nullable: true, description: "대화하는 캐릭터의 이름." },
-        dialogue: { type: Type.STRING, nullable: true, description: "캐릭터의 대사." },
-    },
-    required: ["type"]
-};
-
-const itemEffectsSchema = {
-    type: Type.OBJECT,
-    nullable: true,
-    properties: {
-        attack: { type: Type.INTEGER, nullable: true },
-        defense: { type: Type.INTEGER, nullable: true },
-        maxHp: { type: Type.INTEGER, nullable: true },
-        maxMp: { type: Type.INTEGER, nullable: true },
-        힘: { type: Type.INTEGER, nullable: true },
-        민첩: { type: Type.INTEGER, nullable: true },
-        건강: { type: Type.INTEGER, nullable: true },
-        지능: { type: Type.INTEGER, nullable: true },
-        지혜: { type: Type.INTEGER, nullable: true },
-        매력: { type: Type.INTEGER, nullable: true },
-    }
-};
 
 const itemSchema = {
     type: Type.OBJECT,
@@ -46,7 +18,22 @@ const itemSchema = {
         value: { type: Type.INTEGER },
         itemType: { type: Type.STRING, enum: ['weapon', 'armor', 'consumable', 'quest', 'misc'] as ItemType[] },
         slot: { type: Type.STRING, enum: ['mainHand', 'offHand', 'armor', 'none'] as ItemSlot[] },
-        effects: itemEffectsSchema,
+        effects: {
+            type: Type.OBJECT,
+            nullable: true,
+            properties: {
+                attack: { type: Type.INTEGER, nullable: true },
+                defense: { type: Type.INTEGER, nullable: true },
+                maxHp: { type: Type.INTEGER, nullable: true },
+                maxMp: { type: Type.INTEGER, nullable: true },
+                힘: { type: Type.INTEGER, nullable: true },
+                민첩: { type: Type.INTEGER, nullable: true },
+                건강: { type: Type.INTEGER, nullable: true },
+                지능: { type: Type.INTEGER, nullable: true },
+                지혜: { type: Type.INTEGER, nullable: true },
+                매력: { type: Type.INTEGER, nullable: true },
+            }
+        },
     },
     required: ["name", "description", "value", "itemType", "slot"]
 };
@@ -57,7 +44,6 @@ const sceneResponseSchema = {
     properties: {
         sceneTitle: { type: Type.STRING, description: "현재 장면에 대한 짧고 연상적인 제목." },
         imagePrompt: { type: Type.STRING, description: "이미지 생성을 위한 간결하고 묘사적인 문구." },
-        content: { type: Type.ARRAY, description: "장면을 구성하는 콘텐츠 블록의 배열.", items: contentBlockSchema },
         suggestedActions: { type: Type.ARRAY, items: { type: Type.STRING }, description: "플레이어에게 제공할 3-4개의 추천 행동." },
         skillCheck: {
             type: Type.OBJECT, nullable: true,
@@ -121,7 +107,7 @@ const sceneResponseSchema = {
             required: ["shopName", "items"]
         }
     },
-    required: ["sceneTitle", "imagePrompt", "content", "suggestedActions"],
+    required: ["sceneTitle", "imagePrompt", "suggestedActions"],
 };
 
 const chapterPlanSchema = {
@@ -349,22 +335,7 @@ export const generateChapterPlan = async (character: Character, previousChapterS
     return fallbackPlan;
 };
 
-const serializeContentForHistory = (content: ContentBlock[]): string => {
-    return content.map(block => {
-        switch (block.type) {
-            case 'narration':
-            case 'action':
-            case 'thought':
-                return block.text;
-            case 'dialogue':
-                return `${block.characterName}: "${block.dialogue}"`;
-            default:
-                return '';
-        }
-    }).join('\n');
-};
-
-export const generateScene = async (
+export const generateSceneState = async (
     character: Character,
     storyLog: StoryLogEntry[],
     playerAction: string,
@@ -374,54 +345,112 @@ export const generateScene = async (
     worldMap: WorldMap | null,
     currentTime: number,
     currentDay: number,
+    chapterSummaries: string[] = [],
 ): Promise<GeminiResponse> => {
+    let lastError = '';
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+            const history = convertStoryLogToHistory(storyLog, chapterSummaries);
+            const chat = ai.chats.create({
+                model: 'gemini-3.1-flash-preview',
+                history: history,
+                config: {
+                    systemInstruction: SYSTEM_INSTRUCTION_INTERACTOR,
+                    responseMimeType: "application/json",
+                    responseSchema: sceneResponseSchema,
+                },
+            });
+
+            const currentPlotPoint = chapterPlan.plotPoints[chapterPlan.currentPlotPointIndex];
+            const currentLocation = currentLocationId && worldMap ? worldMap[currentLocationId] : null;
+
+            const getTimeOfDay = (hour: number) => {
+                if (hour >= 5 && hour < 12) return '아침';
+                if (hour >= 12 && hour < 18) return '낮';
+                if (hour >= 18 && hour < 22) return '저녁';
+                return '밤';
+            };
+            const timeOfDay = getTimeOfDay(currentTime);
+            
+            const contextForModel = `
+            **현재 시간:** ${currentDay}일차, ${currentTime}시 (${timeOfDay})
+            **현재 챕터:** "${chapterPlan.chapterTitle}"
+            **챕터 목표:** ${chapterPlan.overallGoal}
+            **현재 단계 목표:** ${currentPlotPoint.objective}
+            **현재 위치:** ${currentLocation ? `${currentLocation.name} (${currentLocation.description})` : '알 수 없음'}
+            **사용 가능한 출구:** ${currentLocation ? Object.keys(currentLocation.exits).join(', ') : '없음'}
+            **현재 등장인물:** ${[character.name, ...Object.keys(npcs)].join(', ')}
+            **캐릭터 상태:** HP ${character.hp}/${character.maxHp}, MP ${character.mp}/${character.maxMp}, 소지품: ${character.inventory.map(i => i.name).join(', ') || '없음'}, 소지금: ${character.gold} G
+            **보유 스킬:** ${character.skills.map(s => s.name).join(', ') || '없음'}
+            
+            ---
+            **플레이어 행동:** "${playerAction}"
+            ---
+            
+            위 맥락에 따라 플레이어의 행동에 대한 게임 시스템적 결과(체력 변화, 아이템, 이동 등)를 계산하여 JSON으로 응답하세요.
+            `;
+            const result = await chat.sendMessage({ message: contextForModel });
+            const text = result.text.trim();
+            return JSON.parse(text);
+        } catch (error) {
+            console.error(`Error generating scene state (attempt ${attempt}):`, error);
+            lastError = error instanceof Error ? error.message : String(error);
+        }
+    }
+    throw new Error(`상태를 계산할 수 없습니다. AI가 응답하지 않습니다. (${lastError})`);
+};
+
+export const generateNarrativeStream = async function* (
+    character: Character,
+    storyLog: StoryLogEntry[],
+    playerAction: string,
+    sceneState: GeminiResponse,
+    chapterPlan: ChapterPlan,
+    currentLocationId: string | null,
+    worldMap: WorldMap | null,
+    chapterSummaries: string[] = [],
+): AsyncGenerator<string, void, unknown> {
     try {
-        const history = convertStoryLogToHistory(storyLog);
+        const history = convertStoryLogToHistory(storyLog, chapterSummaries);
         const chat = ai.chats.create({
             model: 'gemini-3.1-flash-preview',
             history: history,
             config: {
-                systemInstruction: SYSTEM_INSTRUCTION_INTERACTOR,
-                responseMimeType: "application/json",
-                responseSchema: sceneResponseSchema,
+                systemInstruction: `당신은 D&D 어드벤처 게임의 스토리텔러입니다. 시스템 에이전트가 계산한 결과를 바탕으로 유저가 읽을 몰입감 넘치는 소설 같은 텍스트를 작성합니다.
+- Markdown 형식을 사용하여 자유롭게 작성하세요.
+- 대화는 따옴표를 사용하고, 생각을 표현할 때는 이탤릭체를 사용하세요.
+- 시스템의 계산 결과(예: 데미지, 아이템 획득)를 자연스럽게 이야기 속에 녹여내세요.
+- 절대로 JSON 형식으로 응답하지 마세요. 오직 이야기 텍스트만 출력하세요.`,
             },
         });
 
         const currentPlotPoint = chapterPlan.plotPoints[chapterPlan.currentPlotPointIndex];
         const currentLocation = currentLocationId && worldMap ? worldMap[currentLocationId] : null;
 
-        const getTimeOfDay = (hour: number) => {
-            if (hour >= 5 && hour < 12) return '아침';
-            if (hour >= 12 && hour < 18) return '낮';
-            if (hour >= 18 && hour < 22) return '저녁';
-            return '밤';
-        };
-        const timeOfDay = getTimeOfDay(currentTime);
-        
         const contextForModel = `
-        **현재 시간:** ${currentDay}일차, ${currentTime}시 (${timeOfDay})
         **현재 챕터:** "${chapterPlan.chapterTitle}"
-        **챕터 목표:** ${chapterPlan.overallGoal}
         **현재 단계 목표:** ${currentPlotPoint.objective}
         **현재 위치:** ${currentLocation ? `${currentLocation.name} (${currentLocation.description})` : '알 수 없음'}
-        **사용 가능한 출구:** ${currentLocation ? Object.keys(currentLocation.exits).join(', ') : '없음'}
-        **현재 등장인물:** ${[character.name, ...Object.keys(npcs)].join(', ')}
-        **캐릭터 상태:** HP ${character.hp}/${character.maxHp}, MP ${character.mp}/${character.maxMp}, 소지품: ${character.inventory.map(i => i.name).join(', ') || '없음'}, 소지금: ${character.gold} G
-        **보유 스킬:** ${character.skills.map(s => s.name).join(', ') || '없음'}
         
         ---
         **플레이어 행동:** "${playerAction}"
         ---
+        **시스템 계산 결과 (이 내용을 스토리에 반영하세요):**
+        ${JSON.stringify(sceneState, null, 2)}
+        ---
         
-        위 맥락에 따라 플레이어의 행동에 대한 결과를 서술하고 이야기를 계속 진행하세요.
+        위 맥락과 시스템 계산 결과를 바탕으로, 플레이어의 행동에 대한 결과를 서술하고 이야기를 계속 진행하세요.
         `;
-        const result = await chat.sendMessage({ message: contextForModel });
-        const text = result.text.trim();
-        return JSON.parse(text);
-    } catch (error)
- {
-        console.error("Error generating scene:", error);
-        throw new Error("이야기를 진행할 수 없습니다. AI가 응답하지 않습니다.");
+
+        const responseStream = await chat.sendMessageStream({ message: contextForModel });
+        for await (const chunk of responseStream) {
+            if (chunk.text) {
+                yield chunk.text;
+            }
+        }
+    } catch (error) {
+        console.error("Error generating narrative stream:", error);
+        yield "\n\n(이야기를 생성하는 도중 오류가 발생했습니다.)";
     }
 };
 
@@ -430,52 +459,70 @@ export const generateCombatTurnResult = async (
     combatState: CombatState,
     playerAction: string
 ): Promise<GeminiCombatResponse> => {
-    try {
-        const enemiesInfo = combatState.enemies.map(e => `- ${e.name} (ID: ${e.id}, HP: ${e.hp}/${e.maxHp})`).join('\n');
-        const target = combatState.playerTargetId ? combatState.enemies.find(e => e.id === combatState.playerTargetId) : null;
-        
-        const prompt = `
-        **전투 상황:**
-        - 플레이어: ${character.name} (HP: ${character.hp}/${character.maxHp}, MP: ${character.mp}/${character.maxMp})
-        - 보유 스킬: ${character.skills.map(s => `${s.name} (MP 소모: ${s.mpCost})`).join(', ') || '없음'}
-        - 적들:
-        ${enemiesInfo}
-        - 현재 목표: ${target ? `${target.name} (ID: ${target.id})` : '없음'}
+    let lastError = '';
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+            const enemiesInfo = combatState.enemies.map(e => `- ${e.name} (ID: ${e.id}, HP: ${e.hp}/${e.maxHp})`).join('\n');
+            const target = combatState.playerTargetId ? combatState.enemies.find(e => e.id === combatState.playerTargetId) : null;
+            
+            const prompt = `
+            **전투 상황:**
+            - 플레이어: ${character.name} (HP: ${character.hp}/${character.maxHp}, MP: ${character.mp}/${character.maxMp})
+            - 보유 스킬: ${character.skills.map(s => `${s.name} (MP 소모: ${s.mpCost})`).join(', ') || '없음'}
+            - 적들:
+            ${enemiesInfo}
+            - 현재 목표: ${target ? `${target.name} (ID: ${target.id})` : '없음'}
 
-        ---
-        **플레이어 행동:** "${playerAction}"
-        ---
+            ---
+            **플레이어 행동:** "${playerAction}"
+            ---
 
-        위 상황을 바탕으로 플레이어 행동의 결과를 판정하고 JSON으로 응답하세요.
-        `;
-        
-        const response = await ai.models.generateContent({
-            model: 'gemini-3.1-flash-preview',
-            contents: prompt,
-            config: {
-                systemInstruction: SYSTEM_INSTRUCTION_COMBAT,
-                responseMimeType: "application/json",
-                responseSchema: combatResponseSchema,
-                thinkingConfig: { thinkingBudget: 0 },
-            },
-        });
-        
-        return JSON.parse(response.text.trim());
-    } catch (error) {
-        console.error("Error generating combat turn result:", error);
-        throw new Error("전투를 진행할 수 없습니다. AI가 응답하지 않습니다.");
+            위 상황을 바탕으로 플레이어 행동의 결과를 판정하고 JSON으로 응답하세요.
+            `;
+            
+            const response = await ai.models.generateContent({
+                model: 'gemini-3.1-flash-preview',
+                contents: prompt,
+                config: {
+                    systemInstruction: SYSTEM_INSTRUCTION_COMBAT,
+                    responseMimeType: "application/json",
+                    responseSchema: combatResponseSchema,
+                    thinkingConfig: { thinkingBudget: 0 },
+                },
+            });
+            
+            return JSON.parse(response.text.trim());
+        } catch (error) {
+            console.error(`Error generating combat turn result (attempt ${attempt}):`, error);
+            lastError = error instanceof Error ? error.message : String(error);
+        }
     }
+    throw new Error(`전투를 진행할 수 없습니다. AI가 응답하지 않습니다. (${lastError})`);
 };
 
-const convertStoryLogToHistory = (storyLog: StoryLogEntry[]): Content[] => {
+const convertStoryLogToHistory = (storyLog: StoryLogEntry[], chapterSummaries: string[] = []): Content[] => {
     const history: Content[] = [];
-    for (const entry of storyLog) {
+    
+    if (chapterSummaries.length > 0) {
+        history.push({
+            role: 'user',
+            parts: [{ text: `[이전 스토리 요약]\n${chapterSummaries.join('\n')}` }]
+        });
+        history.push({
+            role: 'model',
+            parts: [{ text: "네, 이전 스토리 요약을 숙지했습니다. 현재 상황에 맞춰 다음 진행을 이어가겠습니다." }]
+        });
+    }
+
+    // Keep only the last 10 interactions (20 entries) to prevent context window bloat
+    const MAX_HISTORY_ENTRIES = 20;
+    const recentLog = storyLog.slice(-MAX_HISTORY_ENTRIES);
+
+    for (const entry of recentLog) {
       if (entry.type === StoryPartType.USER) {
         history.push({ role: 'user', parts: [{ text: entry.text }] });
       } else if (entry.type === StoryPartType.AI_SCENE) {
-        // Serialize the content blocks into a single string for history
-        const modelResponseText = serializeContentForHistory(entry.content);
-        history.push({ role: 'model', parts: [{ text: modelResponseText }] });
+        history.push({ role: 'model', parts: [{ text: entry.text || '' }] });
       }
     }
     return history;
@@ -497,7 +544,7 @@ export const summarizeText = async (text: string): Promise<string> => {
 export const generateSummary = async (chapterSummaries: string[], storyLog: StoryLogEntry[]): Promise<string> => {
     const recentLogText = storyLog.slice(-10).map(entry => {
         if (entry.type === StoryPartType.USER) return `플레이어: ${entry.text}`;
-        if (entry.type === StoryPartType.AI_SCENE) return `DM: ${serializeContentForHistory(entry.content)}`;
+        if (entry.type === StoryPartType.AI_SCENE) return `DM: ${entry.text || ''}`;
         if (entry.type === StoryPartType.SYSTEM_MESSAGE) return `시스템: ${entry.text}`;
         return '';
     }).join('\n');

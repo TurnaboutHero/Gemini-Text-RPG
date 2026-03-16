@@ -4,7 +4,7 @@ interface ResourceBarProps {
   current: number;
   max: number;
   color: string;
-  icon: JSX.Element;
+  icon: React.ReactNode;
 }
 
 const ResourceBar: React.FC<ResourceBarProps> = ({ current, max, color, icon }) => {

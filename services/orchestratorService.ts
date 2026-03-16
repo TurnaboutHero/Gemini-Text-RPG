@@ -1,4 +1,4 @@
-import { generateChapterPlan, generateScene, summarizeText, generateCharacterImage, generateSummary, generateCombatTurnResult, generateMapImage } from './geminiService';
+import { generateChapterPlan, generateSceneState, summarizeText, generateCharacterImage, generateSummary, generateCombatTurnResult, generateMapImage } from './geminiService';
 import { Character, ChapterPlan, GeminiResponse, StoryLogEntry, Item, SystemMessagePart, StoryPartType, AiScenePart, Npc, SpecialAction, SpecialActionType, WorldMap, Enemy, CombatState, GeminiCombatResponse, ImageModel } from '../types';
 import { processStateChanges } from './stateManagerService';
 
@@ -74,6 +74,13 @@ export const executeSpecialAction = async (
     }
 };
 
+export interface ImagePromiseResult {
+    type: 'npc' | 'enemy';
+    id: string;
+    name: string;
+    imageUrl: string;
+}
+
 export const processPlayerAction = async (
   actionText: string,
   character: Character,
@@ -100,6 +107,7 @@ export const processPlayerAction = async (
   enemiesToBattle?: Enemy[];
   shop?: { name: string; inventory: Item[] } | null;
   newEntityImages: Record<string, string>;
+  imagePromises: Promise<ImagePromiseResult>[];
 }> => {
   let plan = { ...currentPlan };
   let currentCharacter = { ...character };
@@ -126,17 +134,7 @@ export const processPlayerAction = async (
             .flatMap(entry => {
                 if (entry.type === StoryPartType.USER) return [entry.text];
                 if (entry.type === StoryPartType.AI_SCENE) {
-                    return entry.content.map(block => {
-                        switch (block.type) {
-                            case 'narration':
-                            case 'thought':
-                            case 'action':
-                                return block.text;
-                            case 'dialogue':
-                                return `${block.characterName}: "${block.dialogue}"`;
-                            default: return '';
-                        }
-                    });
+                    return [entry.text || ''];
                 }
                 return [];
             })
@@ -154,10 +152,31 @@ export const processPlayerAction = async (
       updatedLocationId = Object.keys(updatedWorldMap)[0]; // Start at the first location of the new chapter
   }
 
-  const newScene = await generateScene(character, storyLog, actionText, plan, updatedNpcs, updatedLocationId, updatedWorldMap, currentTime, currentDay);
+  const newScene = await generateSceneState(character, storyLog, actionText, plan, updatedNpcs, updatedLocationId, updatedWorldMap, currentTime, currentDay, updatedSummaries);
   
-  const { npcs: newNpcs, newEntityImages: updatedEntityImages1 } = await processNewNpcs(newScene, useImageGeneration, imageModel, entityImages);
-  updatedNpcs = { ...updatedNpcs, ...newNpcs };
+  const imagePromises: Promise<ImagePromiseResult>[] = [];
+  let newEntityImages = { ...entityImages };
+
+  if (newScene.newNpcs) {
+      for (const npcData of newScene.newNpcs) {
+          const id = crypto.randomUUID();
+          updatedNpcs[id] = {
+              id,
+              name: npcData.name,
+              description: npcData.description,
+              imageUrl: newEntityImages[npcData.name] || '',
+          };
+          if (useImageGeneration && !newEntityImages[npcData.name]) {
+              const p = generateCharacterImage(npcData.imagePrompt, npcData.name, null, imageModel)
+                  .then(url => ({ type: 'npc' as const, id, name: npcData.name, imageUrl: url }))
+                  .catch(err => {
+                      console.error(`Failed to generate image for NPC ${npcData.name}:`, err);
+                      return { type: 'npc' as const, id, name: npcData.name, imageUrl: '' };
+                  });
+              imagePromises.push(p);
+          }
+      }
+  }
   
   let shop: { name: string; inventory: Item[] } | null = null;
   if (newScene.shopInventory) {
@@ -170,42 +189,29 @@ export const processPlayerAction = async (
       };
   }
 
-  let newEntityImages = { ...updatedEntityImages1 };
   let enemiesToBattle: Enemy[] | undefined = undefined;
   if (newScene.enterCombat && newScene.enterCombat.length > 0) {
       systemMessages.push({ id: crypto.randomUUID(), type: StoryPartType.SYSTEM_MESSAGE, text: `전투 시작!` });
       enemiesToBattle = [];
       for (const enemyData of newScene.enterCombat) {
-          try {
-              let imageUrl = '';
-              if (useImageGeneration) {
-                  if (newEntityImages[enemyData.name]) {
-                      imageUrl = newEntityImages[enemyData.name];
-                  } else {
-                      imageUrl = await generateCharacterImage(enemyData.imagePrompt, enemyData.name, null, imageModel);
-                      newEntityImages[enemyData.name] = imageUrl;
-                  }
-              }
-              enemiesToBattle.push({
-                  id: crypto.randomUUID(),
-                  name: enemyData.name,
-                  hp: enemyData.hp,
-                  maxHp: enemyData.hp,
-                  attack: enemyData.attack,
-                  defense: enemyData.defense,
-                  imageUrl: imageUrl
-              });
-          } catch (error) {
-              console.error(`Failed to generate image for enemy ${enemyData.name}:`, error);
-              enemiesToBattle.push({ // Add enemy with a placeholder/no image
-                  id: crypto.randomUUID(),
-                  name: enemyData.name,
-                  hp: enemyData.hp,
-                  maxHp: enemyData.hp,
-                  attack: enemyData.attack,
-                  defense: enemyData.defense,
-                  imageUrl: '' // Fallback
-              });
+          const id = crypto.randomUUID();
+          enemiesToBattle.push({
+              id,
+              name: enemyData.name,
+              hp: enemyData.hp,
+              maxHp: enemyData.hp,
+              attack: enemyData.attack,
+              defense: enemyData.defense,
+              imageUrl: newEntityImages[enemyData.name] || ''
+          });
+          if (useImageGeneration && !newEntityImages[enemyData.name]) {
+              const p = generateCharacterImage(enemyData.imagePrompt, enemyData.name, null, imageModel)
+                  .then(url => ({ type: 'enemy' as const, id, name: enemyData.name, imageUrl: url }))
+                  .catch(err => {
+                      console.error(`Failed to generate image for enemy ${enemyData.name}:`, err);
+                      return { type: 'enemy' as const, id, name: enemyData.name, imageUrl: '' };
+                  });
+              imagePromises.push(p);
           }
       }
   }
@@ -236,7 +242,7 @@ export const processPlayerAction = async (
     }
   }
 
-  return { newScene, updatedCharacter: currentCharacter, updatedPlan: plan, systemMessages, updatedSummaries, updatedNpcs, updatedLocationId, updatedWorldMap, enemiesToBattle, shop, newEntityImages };
+  return { newScene, updatedCharacter: currentCharacter, updatedPlan: plan, systemMessages, updatedSummaries, updatedNpcs, updatedLocationId, updatedWorldMap, enemiesToBattle, shop, newEntityImages, imagePromises };
 };
 
 export const processPlayerCombatAction = async (
@@ -246,51 +252,4 @@ export const processPlayerCombatAction = async (
 ): Promise<GeminiCombatResponse> => {
     const result = await generateCombatTurnResult(character, combatState, actionText);
     return result;
-};
-
-const processNewNpcs = async (scene: GeminiResponse, useImageGeneration: boolean, imageModel: ImageModel, entityImages: Record<string, string>): Promise<{ npcs: Record<string, Npc>, newEntityImages: Record<string, string> }> => {
-    const npcs: Record<string, Npc> = {};
-    let newEntityImages = { ...entityImages };
-    if (!scene.newNpcs) {
-        return { npcs, newEntityImages };
-    }
-    const npcImagePromises = scene.newNpcs.map(async (npcData) => {
-        try {
-            let imageUrl = '';
-            if (useImageGeneration) {
-                if (newEntityImages[npcData.name]) {
-                    imageUrl = newEntityImages[npcData.name];
-                } else {
-                    imageUrl = await generateCharacterImage(npcData.imagePrompt, npcData.name, null, imageModel);
-                    newEntityImages[npcData.name] = imageUrl;
-                }
-            }
-            return {
-                name: npcData.name,
-                data: {
-                    id: crypto.randomUUID(),
-                    name: npcData.name,
-                    description: npcData.description,
-                    imageUrl: imageUrl,
-                }
-            };
-        } catch (error) {
-            console.error(`Failed to generate image for NPC ${npcData.name}:`, error);
-            return {
-                name: npcData.name,
-                data: {
-                    id: crypto.randomUUID(),
-                    name: npcData.name,
-                    description: npcData.description,
-                    imageUrl: '', // Fallback image
-                }
-            };
-        }
-    });
-
-    const results = await Promise.all(npcImagePromises);
-    for (const result of results) {
-        npcs[result.name] = result.data;
-    }
-    return { npcs, newEntityImages };
 };

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import Markdown from 'react-markdown';
 import { StoryLogEntry, StoryPartType, AiScenePart, ContentBlock, Character, Npc } from '../types';
 import { FaDiceD20 } from "react-icons/fa";
 
@@ -87,26 +88,6 @@ const DialogueBlockComponent: React.FC<{ block: ContentBlock; character: Charact
   );
 };
 
-const NarrationBlockComponent: React.FC<{ block: ContentBlock }> = ({ block }) => {
-    if (block.type !== 'narration') return null;
-    return (
-        <div className="my-6 text-justify">
-            <p className="font-adventure text-lg md:text-xl leading-relaxed text-gray-300 whitespace-pre-wrap p-4 bg-gray-800/20 border-l-4 border-cyan-900/70 italic">
-                {block.text}
-            </p>
-        </div>
-    );
-};
-
-const ActionBlockComponent: React.FC<{ block: ContentBlock }> = ({ block }) => {
-    if (block.type !== 'action') return null;
-    return (
-      <div className="text-center my-4">
-        <p className="font-bold text-purple-300 bg-purple-900/30 border border-purple-700 rounded-md py-2 px-4 inline-block">{block.text}</p>
-      </div>
-    );
-};
-
 const AiSceneDisplay: React.FC<{ part: AiScenePart, character: Character | null, npcs: Record<string, Npc> }> = ({ part, character, npcs }) => {
   return (
     <div className="fade-in my-8">
@@ -115,14 +96,9 @@ const AiSceneDisplay: React.FC<{ part: AiScenePart, character: Character | null,
           {part.sceneTitle}
         </h2>
       </div>
-      {part.content.map((block, index) => {
-        switch (block.type) {
-            case 'narration': return <NarrationBlockComponent key={index} block={block} />;
-            case 'dialogue': return <DialogueBlockComponent key={index} block={block} character={character} npcs={npcs} />;
-            case 'action': return <ActionBlockComponent key={index} block={block} />;
-            default: return null;
-        }
-      })}
+      <div className="markdown-body text-gray-300 leading-relaxed space-y-4">
+        <Markdown>{part.text || ''}</Markdown>
+      </div>
     </div>
   );
 };

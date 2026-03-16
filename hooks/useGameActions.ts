@@ -1,7 +1,7 @@
 import { useCallback, useRef } from 'react';
 import { GameState, Character, SpecialAction, StoryPartType, AiScenePart, UserStoryPart, SystemMessagePart, ImageModel } from '../types';
 import * as orchestrator from '../services/orchestratorService';
-import { generateInitialImage, editImage } from '../services/geminiService';
+import { generateInitialImage, editImage, generateNarrativeStream } from '../services/geminiService';
 import { audioService } from '../services/audioService';
 import { getInitialState } from './useGameState';
 
@@ -49,8 +49,8 @@ export const useGameActions = (
     }
   };
 
-  const processActionResult = useCallback(async (result: orchestrator.PlayerActionResult, previousImageUrl: string, useImageGeneration: boolean, currentLocationId: string | null, locationImages: Record<string, string>, imageModel: ImageModel) => {
-    const { newScene, updatedCharacter, updatedPlan, systemMessages, updatedSummaries, updatedNpcs, updatedLocationId, updatedWorldMap, enemiesToBattle, shop, newEntityImages } = result;
+  const processActionResult = useCallback(async (result: orchestrator.PlayerActionResult, actionText: string, previousImageUrl: string, useImageGeneration: boolean, currentLocationId: string | null, locationImages: Record<string, string>, imageModel: ImageModel) => {
+    const { newScene, updatedCharacter, updatedPlan, systemMessages, updatedSummaries, updatedNpcs, updatedLocationId, updatedWorldMap, enemiesToBattle, shop, newEntityImages, imagePromises } = result;
     
     if (newScene.timeElapsed && newScene.timeElapsed > 0) {
         systemMessages.push({
@@ -73,7 +73,7 @@ export const useGameActions = (
     const newStoryPart: AiScenePart = {
       id: newStoryPartId,
       type: StoryPartType.AI_SCENE,
-      content: newScene.content,
+      text: '',
       sceneTitle: newScene.sceneTitle,
       imagePrompt: newScene.imagePrompt,
       imageUrl: previousImageUrl,
@@ -119,6 +119,112 @@ export const useGameActions = (
             entityImages: newEntityImages,
         };
     });
+
+    // Start streaming narrative
+    setGameState(prev => ({ ...prev, isLoading: true })); // Keep loading state while streaming
+    
+    // Start image generation asynchronously
+    let imagePromise: Promise<string> = Promise.resolve(previousImageUrl);
+    if (useImageGeneration && !enemiesToBattle?.length && !newScene.skillCheck) {
+        const imageSetting = newScene.imageGenerationSetting || 'EDIT';
+        const base64Data = previousImageUrl.split(',')[1];
+
+        if (updatedLocationId && updatedLocationId !== currentLocationId && locationImages[updatedLocationId]) {
+             imagePromise = Promise.resolve(locationImages[updatedLocationId]);
+        } else if (imageSetting === 'GENERATE' || (imageSetting === 'EDIT' && !base64Data)) {
+            imagePromise = generateInitialImage(newScene.imagePrompt, imageModel);
+        } else if (imageSetting === 'EDIT' && base64Data) {
+            imagePromise = editImage(newScene.imagePrompt, base64Data, imageModel).then(res => res ?? previousImageUrl);
+        }
+        
+        imagePromise.then(finalImageUrl => {
+            setGameState(prev => {
+                const newLocationImages = { ...prev.locationImages };
+                if (updatedLocationId) {
+                    newLocationImages[updatedLocationId] = finalImageUrl;
+                }
+                return {
+                    ...prev,
+                    locationImages: newLocationImages,
+                    storyLog: prev.storyLog.map(part =>
+                        part.id === newStoryPartId
+                            ? { ...part, imageUrl: finalImageUrl, isGeneratingImage: false }
+                            : part
+                    ),
+                };
+            });
+        }).catch(err => {
+            console.error("Error generating image:", err);
+            setGameState(prev => ({
+                ...prev,
+                storyLog: prev.storyLog.map(part =>
+                    part.id === newStoryPartId
+                        ? { ...part, isGeneratingImage: false }
+                        : part
+                ),
+            }));
+        });
+    }
+
+    if (imagePromises && imagePromises.length > 0) {
+        imagePromises.forEach(p => {
+            p.then(res => {
+                setGameState(prev => {
+                    const updatedImages = { ...prev.entityImages, [res.name]: res.imageUrl };
+                    if (res.type === 'npc') {
+                        return {
+                            ...prev,
+                            entityImages: updatedImages,
+                            npcs: {
+                                ...prev.npcs,
+                                [res.id]: { ...prev.npcs[res.id], imageUrl: res.imageUrl }
+                            }
+                        };
+                    } else if (res.type === 'enemy') {
+                        return {
+                            ...prev,
+                            entityImages: updatedImages,
+                            combatState: prev.combatState ? {
+                                ...prev.combatState,
+                                enemies: prev.combatState.enemies.map(e => e.id === res.id ? { ...e, imageUrl: res.imageUrl } : e)
+                            } : null
+                        };
+                    }
+                    return prev;
+                });
+            });
+        });
+    }
+
+    try {
+        const stream = generateNarrativeStream(
+            updatedCharacter,
+            [], // We don't need full history for narrative stream, just the state
+            actionText,
+            newScene,
+            updatedPlan,
+            updatedLocationId,
+            updatedWorldMap,
+            updatedSummaries
+        );
+
+        let streamedText = '';
+        for await (const chunk of stream) {
+            streamedText += chunk;
+            setGameState(prev => ({
+                ...prev,
+                storyLog: prev.storyLog.map(part =>
+                    part.id === newStoryPartId
+                        ? { ...part, text: streamedText }
+                        : part
+                ),
+            }));
+        }
+    } catch (error) {
+        console.error("Error during narrative streaming:", error);
+    } finally {
+        setGameState(prev => ({ ...prev, isLoading: false }));
+    }
     
     if (enemiesToBattle && enemiesToBattle.length > 0) {
         setGameState(prev => ({
@@ -149,40 +255,6 @@ export const useGameActions = (
         }));
         return;
     }
-    
-    let finalImageUrl = previousImageUrl;
-    let newLocationImages = { ...locationImages };
-    
-    if (useImageGeneration) {
-        const imageSetting = newScene.imageGenerationSetting || 'EDIT';
-        const base64Data = previousImageUrl.split(',')[1];
-
-        // Check if we moved to a new location and have a cached image
-        if (updatedLocationId && updatedLocationId !== currentLocationId && newLocationImages[updatedLocationId]) {
-             finalImageUrl = newLocationImages[updatedLocationId];
-        } else if (imageSetting === 'GENERATE' || (imageSetting === 'EDIT' && !base64Data)) {
-            finalImageUrl = await generateInitialImage(newScene.imagePrompt, imageModel);
-            if (updatedLocationId) {
-                newLocationImages[updatedLocationId] = finalImageUrl;
-            }
-        } else if (imageSetting === 'EDIT' && base64Data) {
-            const editedImage = await editImage(newScene.imagePrompt, base64Data, imageModel);
-            finalImageUrl = editedImage ?? previousImageUrl;
-            if (updatedLocationId) {
-                newLocationImages[updatedLocationId] = finalImageUrl;
-            }
-        }
-    }
-
-    setGameState(prev => ({
-      ...prev,
-      locationImages: newLocationImages,
-      storyLog: prev.storyLog.map(part =>
-        part.id === newStoryPartId
-          ? { ...part, imageUrl: finalImageUrl, isGeneratingImage: false }
-          : part
-      ),
-    }));
   }, [addUiEffect, setGameState]);
 
   const handleSendAction = (actionText: string) => {
@@ -195,7 +267,7 @@ export const useGameActions = (
         await checkApiKey(currentState.imageModel);
       }
 
-      const userActionPart: UserStoryPart = { id: crypto.randomUUID(), type: StoryPartType.USER_ACTION, text: actionText };
+      const userActionPart: UserStoryPart = { id: crypto.randomUUID(), type: StoryPartType.USER, text: actionText };
       
       const lastAiPart = [...currentState.storyLog].reverse().find(p => p.type === StoryPartType.AI_SCENE) as AiScenePart | undefined;
       const previousImageUrl = lastAiPart ? lastAiPart.imageUrl : '';
@@ -203,7 +275,7 @@ export const useGameActions = (
       setGameState(prev => ({ ...prev, isLoading: true, error: null, storyLog: [...prev.storyLog, userActionPart], suggestedActions: [], currentShop: null }));
       
       const result = await orchestrator.processPlayerAction(actionText, currentState.character!, currentState.storyLog, currentState.currentChapterPlan!, currentState.chapterSummaries, currentState.npcs, currentState.currentLocationId, currentState.worldMap, currentState.currentTime, currentState.currentDay, currentState.useImageGeneration, currentState.imageModel, currentState.entityImages);
-      await processActionResult(result, previousImageUrl, currentState.useImageGeneration, currentState.currentLocationId, currentState.locationImages, currentState.imageModel);
+      await processActionResult(result, actionText, previousImageUrl, currentState.useImageGeneration, currentState.currentLocationId, currentState.locationImages, currentState.imageModel);
     };
     
     handleAction(perform);
@@ -233,7 +305,7 @@ export const useGameActions = (
         const placeholderScene: AiScenePart = {
             id: crypto.randomUUID(),
             type: StoryPartType.AI_SCENE,
-            content: [{ type: 'narration', text: '모험의 서막이 오르고 있습니다...' }],
+            text: '모험의 서막이 오르고 있습니다...',
             sceneTitle: '...',
             imagePrompt: '',
             imageUrl: '',
@@ -257,7 +329,7 @@ export const useGameActions = (
         const result = await orchestrator.processPlayerAction(initialPrompt, character, [], chapterPlan, [], {}, initialLocationId, worldMap, 8, 1, useImageGeneration, imageModel, {});
         
         // 5. Process the result, which will replace the placeholder and generate images
-        await processActionResult(result, '', useImageGeneration, initialLocationId, {}, imageModel);
+        await processActionResult(result, initialPrompt, '', useImageGeneration, initialLocationId, {}, imageModel);
         
     } catch (err) {
         setGameState(prev => ({
@@ -293,7 +365,7 @@ export const useGameActions = (
       if ('summaryMessage' in result) {
         setGameState(p => ({ ...p, storyLog: [...p.storyLog, result.summaryMessage], isLoading: false }));
       } else if ('actionResult' in result) {
-        await processActionResult(result.actionResult, previousImageUrl, currentState.useImageGeneration, currentState.currentLocationId, currentState.locationImages, currentState.imageModel);
+        await processActionResult(result.actionResult, action.type, previousImageUrl, currentState.useImageGeneration, currentState.currentLocationId, currentState.locationImages, currentState.imageModel);
       }
     };
     

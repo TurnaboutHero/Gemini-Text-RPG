@@ -52,7 +52,13 @@ const App: React.FC = () => {
   const [isSkillMenuOpen, setIsSkillMenuOpen] = useState(false);
   const [isShopOpen, setIsShopOpen] = useState(false);
   const [isMapOpen, setIsMapOpen] = useState(false);
-  const [savedGameExists] = useState(() => !!localStorage.getItem(LOCAL_STORAGE_KEY));
+  const [savedGameExists, setSavedGameExists] = useState(() => !!localStorage.getItem(LOCAL_STORAGE_KEY));
+
+  useEffect(() => {
+    if (gameState.gamePhase === 'start_menu') {
+      setSavedGameExists(!!localStorage.getItem(LOCAL_STORAGE_KEY));
+    }
+  }, [gameState.gamePhase]);
 
   const calculatedStats = useCharacterStats(gameState.character);
   
@@ -90,11 +96,14 @@ const App: React.FC = () => {
   };
 
   if (gameState.gamePhase === 'start_menu') return <Introduction onStartCreation={handleStartCreation} onContinueGame={handleContinueGame} hasSavedGame={savedGameExists} />;
-  if (gameState.gamePhase === 'character_creation') return <CharacterCreator onCharacterCreate={handleCharacterCreate} initialUseImageGeneration={gameState.useImageGeneration} initialImageModel={gameState.imageModel} />;
+  if (gameState.gamePhase === 'character_creation') return <CharacterCreator onCharacterCreate={handleCharacterCreate} initialUseImageGeneration={gameState.useImageGeneration} initialImageModel={gameState.imageModel} error={gameState.error} />;
   if (gameState.gamePhase === 'prologue') {
+    if (gameState.error) {
+      return ( <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center text-center p-4"><h2 className="text-2xl text-red-400 mb-4">오류 발생</h2><p className="text-gray-300 mb-6">{gameState.error}</p><button onClick={() => setGameState(getInitialState())} className="bg-cyan-600 text-white font-bold rounded-lg py-2 px-6 hover:bg-cyan-500">처음으로 돌아가기</button></div> );
+    }
     const prologuePart = gameState.storyLog[0] as AiScenePart | undefined;
     if (gameState.isLoading || !prologuePart) {
-      return ( <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center"><LoadingSpinner /><p className="mt-4 text-lg text-gray-300 animate-pulse">모험의 서막을 여는 중...</p></div> );
+      return ( <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center"><LoadingSpinner /><p className="mt-4 text-lg text-gray-300 animate-pulse">{gameState.loadingMessage || '모험의 서막을 여는 중...'}</p></div> );
     }
     if (!gameState.character) {
       return ( <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center text-center p-4"><h2 className="text-2xl text-red-400 mb-4">오류 발생</h2><p className="text-gray-300 mb-6">{gameState.error || "모험을 시작하는데 필요한 정보를 불러오지 못했습니다."}</p><button onClick={() => setGameState(getInitialState())} className="bg-cyan-600 text-white font-bold rounded-lg py-2 px-6 hover:bg-cyan-500">처음으로 돌아가기</button></div> );

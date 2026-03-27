@@ -209,6 +209,7 @@ export type ImageModel = 'gemini-2.5-flash-image' | 'imagen-4.0-generate-001' | 
 export interface GameState {
   storyLog: StoryLogEntry[];
   isLoading: boolean;
+  loadingMessage?: string;
   error: string | null;
   character: Character | null;
   gamePhase: GamePhase;

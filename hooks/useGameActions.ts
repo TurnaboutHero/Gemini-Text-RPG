@@ -35,10 +35,16 @@ export const useGameActions = (
     try {
       await actionFn();
     } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.';
+      if (errorMessage.includes('Requested entity was not found.') || errorMessage.includes('403') || errorMessage.includes('Permission')) {
+         setGameState(prev => ({ ...prev, hasApiKey: false, isLoading: false, error: 'API 키가 유효하지 않거나 권한이 없습니다. 다시 선택해주세요.' }));
+         await window.aistudio.openSelectKey();
+         return;
+      }
       setGameState(prev => ({
         ...prev,
         isLoading: false,
-        error: err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.'
+        error: errorMessage
       }));
     }
   };
@@ -197,6 +203,7 @@ export const useGameActions = (
     }
 
     try {
+        setGameState(prev => ({ ...prev, loadingMessage: 'AI가 스토리를 작성하는 중...' }));
         const stream = generateNarrativeStream(
             updatedCharacter,
             [], // We don't need full history for narrative stream, just the state
@@ -272,9 +279,12 @@ export const useGameActions = (
       const lastAiPart = [...currentState.storyLog].reverse().find(p => p.type === StoryPartType.AI_SCENE) as AiScenePart | undefined;
       const previousImageUrl = lastAiPart ? lastAiPart.imageUrl : '';
       
-      setGameState(prev => ({ ...prev, isLoading: true, error: null, storyLog: [...prev.storyLog, userActionPart], suggestedActions: [], currentShop: null }));
+      setGameState(prev => ({ ...prev, isLoading: true, loadingMessage: 'AI가 행동 결과를 계산하는 중...', error: null, storyLog: [...prev.storyLog, userActionPart], suggestedActions: [], currentShop: null }));
       
       const result = await orchestrator.processPlayerAction(actionText, currentState.character!, currentState.storyLog, currentState.currentChapterPlan!, currentState.chapterSummaries, currentState.npcs, currentState.currentLocationId, currentState.worldMap, currentState.currentTime, currentState.currentDay, currentState.useImageGeneration, currentState.imageModel, currentState.entityImages);
+      
+      setGameState(prev => ({ ...prev, loadingMessage: 'AI가 장면 이미지를 생성하는 중...' }));
+      
       await processActionResult(result, actionText, previousImageUrl, currentState.useImageGeneration, currentState.currentLocationId, currentState.locationImages, currentState.imageModel);
     };
     
@@ -292,6 +302,7 @@ export const useGameActions = (
       character: character,
       gamePhase: 'prologue',
       isLoading: true,
+      loadingMessage: '모험 준비 중...',
       error: null,
       useImageGeneration: useImageGeneration,
       imageModel: imageModel,
@@ -299,7 +310,12 @@ export const useGameActions = (
 
     try {
         // 2. Get only the chapter plan (fast operation)
-        const { chapterPlan, initialLocationId, worldMap } = await orchestrator.initializeGame(character, useImageGeneration, imageModel);
+        const { chapterPlan, initialLocationId, worldMap } = await orchestrator.initializeGame(
+            character, 
+            useImageGeneration, 
+            imageModel,
+            (msg) => setGameState(prev => ({ ...prev, loadingMessage: msg }))
+        );
 
         // 3. Set up the game state with a placeholder for the first scene
         const placeholderScene: AiScenePart = {
@@ -317,6 +333,7 @@ export const useGameActions = (
             ...prev,
             storyLog: [placeholderScene],
             isLoading: true, // Keep loading true for scene generation
+            loadingMessage: 'AI가 첫 장면 스토리를 작성하는 중...',
             currentChapterPlan: chapterPlan,
             currentLocationId: initialLocationId,
             worldMap: worldMap,
@@ -328,14 +345,22 @@ export const useGameActions = (
         // Use processPlayerAction to generate the scene and handle all side effects
         const result = await orchestrator.processPlayerAction(initialPrompt, character, [], chapterPlan, [], {}, initialLocationId, worldMap, 8, 1, useImageGeneration, imageModel, {});
         
+        setGameState(prev => ({ ...prev, loadingMessage: 'AI가 첫 장면의 이미지를 그리는 중...' }));
+        
         // 5. Process the result, which will replace the placeholder and generate images
         await processActionResult(result, initialPrompt, '', useImageGeneration, initialLocationId, {}, imageModel);
         
     } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.';
+        if (errorMessage.includes('Requested entity was not found.') || errorMessage.includes('403') || errorMessage.includes('Permission')) {
+            setGameState(prev => ({ ...prev, hasApiKey: false, isLoading: false, error: 'API 키가 유효하지 않거나 권한이 없습니다. 다시 선택해주세요.', gamePhase: 'character_creation' }));
+            await window.aistudio.openSelectKey();
+            return;
+        }
         setGameState(prev => ({
             ...prev,
             isLoading: false,
-            error: err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.',
+            error: errorMessage,
             gamePhase: 'character_creation',
         }));
     }
@@ -356,7 +381,7 @@ export const useGameActions = (
         await checkApiKey(currentState.imageModel);
       }
 
-      setGameState(p => ({ ...p, isActionMenuOpen: false, isLoading: true, error: null, suggestedActions: [], currentShop: null }));
+      setGameState(p => ({ ...p, isActionMenuOpen: false, isLoading: true, loadingMessage: '특수 행동을 처리하는 중...', error: null, suggestedActions: [], currentShop: null }));
       
       const lastAiPart = [...currentState.storyLog].reverse().find(p => p.type === StoryPartType.AI_SCENE) as AiScenePart | undefined;
       const previousImageUrl = lastAiPart ? lastAiPart.imageUrl : '';
@@ -365,6 +390,7 @@ export const useGameActions = (
       if ('summaryMessage' in result) {
         setGameState(p => ({ ...p, storyLog: [...p.storyLog, result.summaryMessage], isLoading: false }));
       } else if ('actionResult' in result) {
+        setGameState(p => ({ ...p, loadingMessage: '행동 결과를 적용하는 중...' }));
         await processActionResult(result.actionResult, action.type, previousImageUrl, currentState.useImageGeneration, currentState.currentLocationId, currentState.locationImages, currentState.imageModel);
       }
     };

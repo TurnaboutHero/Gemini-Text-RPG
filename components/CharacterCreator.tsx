@@ -8,9 +8,10 @@ interface CharacterCreatorProps {
   onCharacterCreate: (character: Character, useImageGeneration: boolean, imageModel: ImageModel) => Promise<void>;
   initialUseImageGeneration: boolean;
   initialImageModel: ImageModel;
+  error?: string | null;
 }
 
-const CharacterCreator: React.FC<CharacterCreatorProps> = ({ onCharacterCreate, initialUseImageGeneration, initialImageModel }) => {
+const CharacterCreator: React.FC<CharacterCreatorProps> = ({ onCharacterCreate, initialUseImageGeneration, initialImageModel, error }) => {
   const [step, setStep] = useState(1);
   const totalSteps = 5;
 
@@ -295,12 +296,12 @@ const CharacterCreator: React.FC<CharacterCreatorProps> = ({ onCharacterCreate, 
                       className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-3 text-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
                     >
                       <optgroup label="기본 모델 (무료)">
-                        <option value="gemini-2.5-flash-image">Gemini 2.5 Flash Image</option>
+                        <option value="gemini-2.5-flash-image">나노 바나나 (Gemini 2.5 Flash Image)</option>
                         <option value="imagen-4.0-generate-001">Imagen 4.0</option>
                       </optgroup>
                       <optgroup label="프리미엄 모델 (API 키 필요)">
-                        <option value="gemini-3-pro-image-preview">Nanabanana Pro (Gemini 3.0 Pro)</option>
-                        <option value="gemini-3.1-flash-image-preview">Nanabanana 2 (Gemini 3.1 Flash)</option>
+                        <option value="gemini-3-pro-image-preview">나노 바나나 Pro (Gemini 3.0 Pro)</option>
+                        <option value="gemini-3.1-flash-image-preview">나노 바나나 2 (Gemini 3.1 Flash)</option>
                       </optgroup>
                     </select>
                     {(imageModel === 'gemini-3-pro-image-preview' || imageModel === 'gemini-3.1-flash-image-preview') && (
@@ -446,7 +447,12 @@ const CharacterCreator: React.FC<CharacterCreatorProps> = ({ onCharacterCreate, 
                 {renderStepContent()}
             </div>
             
-            <div className="flex justify-between items-center mt-8">
+            <div className="flex justify-between items-center mt-8 relative">
+                {error && (
+                    <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 w-full max-w-md bg-red-900/80 text-red-100 text-sm p-2 rounded-lg border border-red-700 text-center shadow-lg animate-pulse">
+                        {error}
+                    </div>
+                )}
                 <button
                     type="button"
                     onClick={prevStep}

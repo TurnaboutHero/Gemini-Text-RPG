@@ -2,12 +2,20 @@ import { generateChapterPlan, generateSceneState, summarizeText, generateCharact
 import { Character, ChapterPlan, GeminiResponse, StoryLogEntry, Item, SystemMessagePart, StoryPartType, AiScenePart, Npc, SpecialAction, SpecialActionType, WorldMap, Enemy, CombatState, GeminiCombatResponse, ImageModel } from '../types';
 import { processStateChanges } from './stateManagerService';
 
-export const initializeGame = async (character: Character, useImageGeneration: boolean, imageModel: ImageModel = 'gemini-2.5-flash-image'): Promise<{
+export const initializeGame = async (
+  character: Character, 
+  useImageGeneration: boolean, 
+  imageModel: ImageModel = 'gemini-2.5-flash-image',
+  onProgress?: (msg: string) => void
+): Promise<{
   chapterPlan: ChapterPlan;
   initialLocationId: string;
   worldMap: WorldMap;
 }> => {
+  console.log("initializeGame started");
+  onProgress?.('AI가 챕터 계획을 생성하는 중...');
   const planData = await generateChapterPlan(character, []);
+  console.log("generateChapterPlan completed", planData);
   
   const locations = planData?.locations;
   const locationIds = locations ? Object.keys(locations) : [];
@@ -17,7 +25,13 @@ export const initializeGame = async (character: Character, useImageGeneration: b
       throw new Error("AI가 생성한 챕터 계획에 유효한 시작 장소가 없습니다. 다시 시도해 주세요.");
   }
 
-  const mapImageUrl = useImageGeneration ? await generateMapImage(planData.locations, imageModel) : '';
+  let mapImageUrl = '';
+  if (useImageGeneration) {
+      console.log("generateMapImage started");
+      onProgress?.('AI가 세계 지도 이미지를 생성하는 중...');
+      mapImageUrl = await generateMapImage(planData.locations, imageModel);
+      console.log("generateMapImage completed");
+  }
 
   const chapterPlan: ChapterPlan = {
       ...planData,

@@ -4,11 +4,13 @@ import { GoogleGenAI, Chat, Type, Modality, Content } from "@google/genai";
 import { GeminiResponse, Character, StoryLogEntry, StoryPartType, AiScenePart, ChapterPlan, ContentBlock, Npc, WorldMap, ItemSlot, ItemType, Ability, CombatState, GeminiCombatResponse, ImageModel } from '../types';
 import { SYSTEM_INSTRUCTION_INTERACTOR, SYSTEM_INSTRUCTION_PLANNER, SYSTEM_INSTRUCTION_COMBAT } from "../scenarioData";
 
-if (!process.env.API_KEY) {
-    throw new Error("API_KEY environment variable not set");
-}
-
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const getAiInstance = () => {
+    const apiKey = (typeof process !== 'undefined' && process.env && process.env.API_KEY) || process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+        throw new Error("API_KEY environment variable not set");
+    }
+    return new GoogleGenAI({ apiKey: apiKey });
+};
 
 const itemSchema = {
     type: Type.OBJECT,
@@ -200,8 +202,11 @@ export const generateChapterPlan = async (character: Character, previousChapterS
     const MAX_RETRIES = 3;
     let lastError: string | null = null;
 
+    console.log("generateChapterPlan started");
+
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
+            console.log(`generateChapterPlan attempt ${attempt}`);
             const characterInfo = `플레이어 캐릭터: ${character.name}, ${character.race} ${character.class}.`;
             const summaryInfo = previousChapterSummaries.length > 0
                 ? `\n\n**이전 모험 요약:**\n- ${previousChapterSummaries.join('\n- ')}`
@@ -234,6 +239,8 @@ export const generateChapterPlan = async (character: Character, previousChapterS
                 prompt += `\n\n**수정 지시:** 이전 시도가 실패했습니다 (실패 사유: ${failureReason}). 응답을 다시 생성하세요. **'locations' 필드를 반드시 포함하고, 제공된 JSON 스키마의 모든 요구사항을 완벽하게 준수해야 합니다.** 아래는 'locations' 필드의 올바른 예시입니다:\n${example}`;
             }
             
+            const ai = getAiInstance();
+            console.log("Calling ai.models.generateContent for chapter plan");
             const response = await ai.models.generateContent({
                 model: 'gemini-3.1-pro-preview',
                 contents: prompt,
@@ -243,6 +250,7 @@ export const generateChapterPlan = async (character: Character, previousChapterS
                     responseSchema: chapterPlanSchema,
                 },
             });
+            console.log("Received response for chapter plan");
             const parsedResponse = JSON.parse(response.text.trim());
 
             let locationsArray: any[] | undefined;
@@ -280,6 +288,7 @@ export const generateChapterPlan = async (character: Character, previousChapterS
                         return acc;
                     }, {});
 
+                    console.log("generateChapterPlan succeeded");
                     return {
                         ...parsedResponse,
                         plotPoints: (parsedResponse.plotPoints || []).map((p: any) => ({ ...p, completed: false })),
@@ -348,11 +357,14 @@ export const generateSceneState = async (
     chapterSummaries: string[] = [],
 ): Promise<GeminiResponse> => {
     let lastError = '';
+    console.log("generateSceneState started for action:", playerAction);
     for (let attempt = 1; attempt <= 3; attempt++) {
         try {
+            console.log(`generateSceneState attempt ${attempt}`);
             const history = convertStoryLogToHistory(storyLog, chapterSummaries);
+            const ai = getAiInstance();
             const chat = ai.chats.create({
-                model: 'gemini-3.1-flash-preview',
+                model: 'gemini-3.1-flash-lite-preview',
                 history: history,
                 config: {
                     systemInstruction: SYSTEM_INSTRUCTION_INTERACTOR,
@@ -361,7 +373,7 @@ export const generateSceneState = async (
                 },
             });
 
-            const currentPlotPoint = chapterPlan.plotPoints[chapterPlan.currentPlotPointIndex];
+            const currentPlotPoint = chapterPlan.plotPoints[chapterPlan.currentPlotPointIndex] || { objective: '알 수 없음' };
             const currentLocation = currentLocationId && worldMap ? worldMap[currentLocationId] : null;
 
             const getTimeOfDay = (hour: number) => {
@@ -389,7 +401,9 @@ export const generateSceneState = async (
             
             위 맥락에 따라 플레이어의 행동에 대한 게임 시스템적 결과(체력 변화, 아이템, 이동 등)를 계산하여 JSON으로 응답하세요.
             `;
+            console.log("Calling chat.sendMessage for scene state");
             const result = await chat.sendMessage({ message: contextForModel });
+            console.log("Received response for scene state");
             const text = result.text.trim();
             return JSON.parse(text);
         } catch (error) {
@@ -411,9 +425,11 @@ export const generateNarrativeStream = async function* (
     chapterSummaries: string[] = [],
 ): AsyncGenerator<string, void, unknown> {
     try {
+        console.log("generateNarrativeStream started");
         const history = convertStoryLogToHistory(storyLog, chapterSummaries);
+        const ai = getAiInstance();
         const chat = ai.chats.create({
-            model: 'gemini-3.1-flash-preview',
+            model: 'gemini-3.1-flash-lite-preview',
             history: history,
             config: {
                 systemInstruction: `당신은 D&D 어드벤처 게임의 스토리텔러입니다. 시스템 에이전트가 계산한 결과를 바탕으로 유저가 읽을 몰입감 넘치는 소설 같은 텍스트를 작성합니다.
@@ -424,7 +440,7 @@ export const generateNarrativeStream = async function* (
             },
         });
 
-        const currentPlotPoint = chapterPlan.plotPoints[chapterPlan.currentPlotPointIndex];
+        const currentPlotPoint = chapterPlan.plotPoints[chapterPlan.currentPlotPointIndex] || { objective: '알 수 없음' };
         const currentLocation = currentLocationId && worldMap ? worldMap[currentLocationId] : null;
 
         const contextForModel = `
@@ -442,12 +458,17 @@ export const generateNarrativeStream = async function* (
         위 맥락과 시스템 계산 결과를 바탕으로, 플레이어의 행동에 대한 결과를 서술하고 이야기를 계속 진행하세요.
         `;
 
+        console.log("Calling chat.sendMessageStream for narrative");
         const responseStream = await chat.sendMessageStream({ message: contextForModel });
+        let chunkCount = 0;
         for await (const chunk of responseStream) {
             if (chunk.text) {
+                chunkCount++;
+                if (chunkCount === 1) console.log("Received first chunk of narrative stream");
                 yield chunk.text;
             }
         }
+        console.log(`generateNarrativeStream completed, yielded ${chunkCount} chunks`);
     } catch (error) {
         console.error("Error generating narrative stream:", error);
         yield "\n\n(이야기를 생성하는 도중 오류가 발생했습니다.)";
@@ -480,8 +501,9 @@ export const generateCombatTurnResult = async (
             위 상황을 바탕으로 플레이어 행동의 결과를 판정하고 JSON으로 응답하세요.
             `;
             
+            const ai = getAiInstance();
             const response = await ai.models.generateContent({
-                model: 'gemini-3.1-flash-preview',
+                model: 'gemini-3.1-flash-lite-preview',
                 contents: prompt,
                 config: {
                     systemInstruction: SYSTEM_INSTRUCTION_COMBAT,
@@ -530,8 +552,9 @@ const convertStoryLogToHistory = (storyLog: StoryLogEntry[], chapterSummaries: s
 
 export const summarizeText = async (text: string): Promise<string> => {
     try {
+        const ai = getAiInstance();
         const response = await ai.models.generateContent({
-            model: 'gemini-3.1-flash-preview',
+            model: 'gemini-3.1-flash-lite-preview',
             contents: `다음 게임 로그를 한 문장의 흥미로운 요약으로 만들어주세요:\n\n---\n${text}\n---`,
         });
         return response.text.trim();
@@ -556,8 +579,9 @@ export const generateSummary = async (chapterSummaries: string[], storyLog: Stor
     const prompt = `당신은 플레이어의 모험을 요약해주는 현명한 음유시인입니다. 아래의 정보를 바탕으로, 현재까지의 전체적인 상황을 흥미진진하고 간결하게 요약해주세요. 플레이어에게 직접 말하는 말투를 사용해주세요.\n\n${summaryText}\n\n**최근 사건들:**\n${recentLogText}\n---`;
 
     try {
+        const ai = getAiInstance();
         const response = await ai.models.generateContent({
-            model: 'gemini-3.1-flash-preview',
+            model: 'gemini-3.1-flash-lite-preview',
             contents: prompt,
         });
         return response.text.trim();
@@ -569,7 +593,10 @@ export const generateSummary = async (chapterSummaries: string[], storyLog: Stor
 
 export const generateInitialImage = async (prompt: string, model: ImageModel = 'gemini-2.5-flash-image'): Promise<string> => {
     try {
+        console.log("generateInitialImage started");
+        const ai = getAiInstance();
         if (model === 'imagen-4.0-generate-001') {
+            console.log("Calling ai.models.generateImages for initial image");
             const response = await ai.models.generateImages({
                 model: model,
                 prompt: `Epic fantasy adventure game screen, digital painting, atmospheric lighting, wide angle. ${prompt}`,
@@ -578,10 +605,12 @@ export const generateInitialImage = async (prompt: string, model: ImageModel = '
                     aspectRatio: "16:9",
                 }
             });
+            console.log("Received response for initial image");
             const base64Data = response.generatedImages[0].image.imageBytes;
             return `data:image/jpeg;base64,${base64Data}`;
         }
 
+        console.log("Calling ai.models.generateContent for initial image");
         const response = await ai.models.generateContent({
             model: model,
             contents: {
@@ -596,6 +625,7 @@ export const generateInitialImage = async (prompt: string, model: ImageModel = '
                 }
             }
         });
+        console.log("Received response for initial image");
 
         for (const part of response.candidates?.[0]?.content?.parts || []) {
             if (part.inlineData) {
@@ -610,6 +640,7 @@ export const generateInitialImage = async (prompt: string, model: ImageModel = '
 
 export const generateMapImage = async (worldMap: WorldMap, model: ImageModel = 'gemini-2.5-flash-image'): Promise<string> => {
     try {
+        console.log("generateMapImage started");
         const locationDescriptions = Object.values(worldMap).map(loc => {
             const exitInfo = Object.entries(loc.exits).map(([dir, destId]) => {
                 const destName = worldMap[destId]?.name || '알 수 없는 곳';
@@ -620,7 +651,9 @@ export const generateMapImage = async (worldMap: WorldMap, model: ImageModel = '
 
         const prompt = `Top-down fantasy world map, old parchment paper texture, hand-drawn style with intricate details, geographic elements like forests, mountains, rivers should be visible. The map illustrates the following connected locations:\n${locationDescriptions}\nEnsure all named locations are clearly visible and connected according to the description.`;
         
+        const ai = getAiInstance();
         if (model === 'imagen-4.0-generate-001') {
+            console.log("Calling ai.models.generateImages for map image");
             const response = await ai.models.generateImages({
                 model: model,
                 prompt: prompt,
@@ -629,10 +662,12 @@ export const generateMapImage = async (worldMap: WorldMap, model: ImageModel = '
                     aspectRatio: "16:9",
                 }
             });
+            console.log("Received response for map image");
             const base64Data = response.generatedImages[0].image.imageBytes;
             return `data:image/jpeg;base64,${base64Data}`;
         }
 
+        console.log("Calling ai.models.generateContent for map image");
         const response = await ai.models.generateContent({
             model: model,
             contents: {
@@ -647,6 +682,7 @@ export const generateMapImage = async (worldMap: WorldMap, model: ImageModel = '
                 }
             }
         });
+        console.log("Received response for map image");
 
         for (const part of response.candidates?.[0]?.content?.parts || []) {
             if (part.inlineData) {
@@ -667,6 +703,7 @@ export const generateCharacterImage = async (
     model: ImageModel = 'gemini-2.5-flash-image'
 ): Promise<string> => {
     try {
+        const ai = getAiInstance();
         if (model === 'imagen-4.0-generate-001') {
              const prompt = `Epic fantasy RPG character portrait, digital painting, detailed face. ${characterPrompt}. Centered, atmospheric lighting, high quality.`;
              const response = await ai.models.generateImages({
@@ -687,6 +724,7 @@ export const generateCharacterImage = async (
             const mimeType = referenceImageBase64.match(/data:(.*);base64,/)?.[1] || 'image/jpeg';
             const imagePart = { inlineData: { data: base64Data, mimeType: mimeType } };
             const textPart = { text: `이 이미지를 참고하여 서사적인 판타지 RPG 캐릭터 초상화를 만들어주세요. 캐릭터 설명: "${characterPrompt}". 참고 이미지의 스타일을 유지하면서 이 설명에 맞게 캐릭터를 그려주세요. 디지털 페인팅 스타일과 분위기 있는 조명을 사용해주세요.` };
+            const ai = getAiInstance();
             const response = await ai.models.generateContent({
                 model: model,
                 contents: { parts: [imagePart, textPart] },
@@ -706,6 +744,7 @@ export const generateCharacterImage = async (
             throw new Error("AI가 참고 이미지를 기반으로 이미지를 반환하지 않았습니다.");
         } else {
             const prompt = `Epic fantasy RPG character portrait, digital painting, detailed face. ${characterPrompt}. Centered, atmospheric lighting, high quality.`;
+            const ai = getAiInstance();
             const response = await ai.models.generateContent({
                 model: model,
                 contents: {
@@ -743,6 +782,7 @@ export const editImage = async (prompt: string, base64ImageData: string, model: 
 
         const imagePart = { inlineData: { data: base64ImageData, mimeType: 'image/jpeg' } };
         const textPart = { text: `이 새로운 맥락에 맞게 이미지를 미묘하게 수정하세요: ${prompt}. 전체적인 스타일과 구성을 유지하면서 새로운 이야기의 흐름을 반영해주세요.` };
+        const ai = getAiInstance();
         const response = await ai.models.generateContent({
             model: model,
             contents: { parts: [imagePart, textPart] },

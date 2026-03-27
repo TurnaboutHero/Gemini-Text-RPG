@@ -20,7 +20,7 @@ export const useCombat = (
   const handleCombatActionSubmit = useCallback(async (actionText: string) => {
     if (!gameState.character || !gameState.combatState) return;
 
-    setGameState(prev => ({ ...prev, isLoading: true, error: null }));
+    setGameState(prev => ({ ...prev, isLoading: true, loadingMessage: '전투 결과를 계산하는 중...', error: null }));
 
     try {
       const result = await orchestrator.processPlayerCombatAction(

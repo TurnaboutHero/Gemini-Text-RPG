@@ -7,6 +7,7 @@ export const getInitialState = (): GameState => {
   return {
     storyLog: [],
     isLoading: false,
+    loadingMessage: '',
     error: null,
     character: null,
     gamePhase: 'start_menu',
@@ -72,6 +73,15 @@ export const useGameState = () => {
         const savedStateJSON = localStorage.getItem(LOCAL_STORAGE_KEY);
         if (savedStateJSON) {
             const savedState = JSON.parse(savedStateJSON);
+            
+            // If the game was saved during prologue generation (placeholder scene), it's corrupted.
+            if (savedState.gamePhase === 'prologue' && savedState.storyLog[0]?.sceneTitle === '...') {
+                console.warn("Found interrupted prologue generation. Restarting from character creation.");
+                localStorage.removeItem(LOCAL_STORAGE_KEY);
+                setGameState(getInitialState());
+                return;
+            }
+
             const loadedPhase = savedState.gamePhase === 'in_combat' ? 'in_game' : savedState.gamePhase;
             setGameState({
                 ...savedState,
@@ -91,12 +101,10 @@ export const useGameState = () => {
   }, []);
 
   const handleNewGame = useCallback((setIsCharacterSheetOpen: (isOpen: boolean) => void) => {
-    if (window.confirm("새로운 게임을 시작하면 현재 진행 상황이 모두 사라집니다. 정말 시작하시겠습니까?")) {
-        localStorage.removeItem(LOCAL_STORAGE_KEY);
-        setGameState(getInitialState());
-        setIsCharacterSheetOpen(false);
-        audioService.playBgm('main_menu');
-    }
+    localStorage.removeItem(LOCAL_STORAGE_KEY);
+    setGameState(getInitialState());
+    setIsCharacterSheetOpen(false);
+    audioService.playBgm('main_menu');
   }, []);
 
   const addUiEffect = useCallback((text: string, color: string, elementId: string) => {

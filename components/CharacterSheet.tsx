@@ -33,6 +33,20 @@ const ProgressBar: React.FC<{ value: number; max: number; label: string; color: 
 
 const CharacterSheet: React.FC<CharacterSheetProps> = ({ character, calculatedStats, onClose, onNewGame, onEquipItem, onUnequipItem }) => {
   const [activeTab, setActiveTab] = useState<'stats' | 'inventory'>('stats');
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+
+  const handleNewGameClick = () => {
+    setShowConfirmModal(true);
+  };
+
+  const confirmNewGame = () => {
+    setShowConfirmModal(false);
+    onNewGame();
+  };
+
+  const cancelNewGame = () => {
+    setShowConfirmModal(false);
+  };
 
   const renderStat = (ability: Ability) => {
     const baseScore = character.abilityScores[ability] || 10;
@@ -157,7 +171,7 @@ const CharacterSheet: React.FC<CharacterSheetProps> = ({ character, calculatedSt
         {/* Footer */}
         <div className="mt-6 text-center border-t border-gray-700 pt-4">
             <button
-                onClick={onNewGame}
+                onClick={handleNewGameClick}
                 className="bg-red-800 text-white font-bold rounded-lg py-2 px-6 text-sm hover:bg-red-700 transition-colors"
             >
                 새로운 모험 시작하기
@@ -165,6 +179,31 @@ const CharacterSheet: React.FC<CharacterSheetProps> = ({ character, calculatedSt
         </div>
 
       </div>
+
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70 p-4">
+          <div className="bg-gray-800 border-2 border-red-700 rounded-xl p-6 max-w-md w-full shadow-2xl shadow-red-900/20">
+            <h3 className="text-xl font-bold text-white mb-4">새로운 모험 시작</h3>
+            <p className="text-gray-300 mb-6">
+              새로운 게임을 시작하면 현재 진행 상황이 모두 사라집니다. 정말 시작하시겠습니까?
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={cancelNewGame}
+                className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={confirmNewGame}
+                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-500 transition-colors"
+              >
+                시작하기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -105,10 +105,10 @@ const App: React.FC = () => {
     if (gameState.isLoading || !prologuePart) {
       return ( <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center"><LoadingSpinner /><p className="mt-4 text-lg text-gray-300 animate-pulse">{gameState.loadingMessage || '모험의 서막을 여는 중...'}</p></div> );
     }
-    if (!gameState.character) {
+    if (!gameState.character || !gameState.currentChapterPlan) {
       return ( <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center text-center p-4"><h2 className="text-2xl text-red-400 mb-4">오류 발생</h2><p className="text-gray-300 mb-6">{gameState.error || "모험을 시작하는데 필요한 정보를 불러오지 못했습니다."}</p><button onClick={() => setGameState(getInitialState())} className="bg-cyan-600 text-white font-bold rounded-lg py-2 px-6 hover:bg-cyan-500">처음으로 돌아가기</button></div> );
     }
-    return <Prologue character={gameState.character} prologue={prologuePart} onContinue={handleContinueToGame} />;
+    return <Prologue character={gameState.character} prologue={prologuePart} chapterPlan={gameState.currentChapterPlan} onContinue={handleContinueToGame} />;
   }
   if (gameState.gamePhase === 'game_over') return <GameOver onRestart={handleRestartFromDefeat} onNewGame={() => handleNewGame(setIsCharacterSheetOpen)} />;
 
@@ -132,6 +132,7 @@ const App: React.FC = () => {
                 onOpenQuestLog={() => setIsQuestLogOpen(true)}
                 onOpenMap={() => setIsMapOpen(true)}
                 onToggleImageGeneration={() => setGameState(prev => ({ ...prev, useImageGeneration: !prev.useImageGeneration }))}
+                onOpenCharacterSheet={() => setIsCharacterSheetOpen(true)}
              />
             <main className="flex-grow flex flex-col overflow-hidden">
              {gameState.gamePhase !== 'in_combat' && <StoryLog storyLog={gameState.storyLog} character={gameState.character} npcs={gameState.npcs} />}
@@ -174,11 +175,6 @@ const App: React.FC = () => {
             </footer>
           </div>
         </div>
-      </div>
-      <div className="fixed bottom-4 right-4 z-50">
-        <button id="character-sheet-button" onClick={() => setIsCharacterSheetOpen(true)} className="w-14 h-14 bg-cyan-600 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-cyan-500 transition-all duration-300 transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-cyan-500" aria-label="캐릭터 시트 열기">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" /></svg>
-        </button>
       </div>
       {isCharacterSheetOpen && gameState.character && (
         <CharacterSheet

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FaMapMarkerAlt, FaSun, FaMoon, FaCloudSun, FaCloudMoon, FaBook, FaMap, FaImage } from 'react-icons/fa';
+import { FaMapMarkerAlt, FaSun, FaMoon, FaCloudSun, FaCloudMoon, FaBook, FaMap, FaImage, FaUser } from 'react-icons/fa';
 
 interface HeaderProps {
   locationName: string;
@@ -9,6 +9,7 @@ interface HeaderProps {
   onOpenQuestLog: () => void;
   onOpenMap: () => void;
   onToggleImageGeneration: () => void;
+  onOpenCharacterSheet: () => void;
 }
 
 const getTimeInfo = (hour: number): { period: string; icon: React.ReactNode } => {
@@ -18,7 +19,7 @@ const getTimeInfo = (hour: number): { period: string; icon: React.ReactNode } =>
     return { period: '밤', icon: <FaMoon className="text-indigo-400" /> };
 };
 
-const Header: React.FC<HeaderProps> = ({ locationName, currentDay, currentTime, useImageGeneration, onOpenQuestLog, onOpenMap, onToggleImageGeneration }) => {
+const Header: React.FC<HeaderProps> = ({ locationName, currentDay, currentTime, useImageGeneration, onOpenQuestLog, onOpenMap, onToggleImageGeneration, onOpenCharacterSheet }) => {
     const { period, icon } = getTimeInfo(currentTime);
 
     return (
@@ -43,9 +44,18 @@ const Header: React.FC<HeaderProps> = ({ locationName, currentDay, currentTime, 
                     <FaImage className="w-5 h-5"/>
                   </button>
                   <button
+                    onClick={onOpenCharacterSheet}
+                    className="p-2 text-gray-400 hover:text-white transition-colors"
+                    aria-label="캐릭터 정보 열기"
+                    title="캐릭터 정보"
+                  >
+                    <FaUser className="w-5 h-5"/>
+                  </button>
+                  <button
                     onClick={onOpenQuestLog}
                     className="p-2 text-gray-400 hover:text-white transition-colors"
                     aria-label="임무 일지 열기"
+                    title="임무 일지"
                   >
                     <FaBook className="w-5 h-5"/>
                   </button>
@@ -53,6 +63,7 @@ const Header: React.FC<HeaderProps> = ({ locationName, currentDay, currentTime, 
                     onClick={onOpenMap}
                     className="p-2 text-gray-400 hover:text-white transition-colors"
                     aria-label="월드맵 열기"
+                    title="월드맵"
                   >
                     <FaMap className="w-5 h-5"/>
                   </button>

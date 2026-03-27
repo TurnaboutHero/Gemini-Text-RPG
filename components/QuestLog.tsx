@@ -1,6 +1,6 @@
 import React from 'react';
 import { ChapterPlan } from '../types';
-import { FaTimes, FaBullseye, FaCheckCircle, FaStream } from 'react-icons/fa';
+import { FaTimes, FaBullseye, FaCheckCircle, FaStream, FaQuestionCircle } from 'react-icons/fa';
 
 interface QuestLogProps {
   plan: ChapterPlan;
@@ -46,7 +46,19 @@ const QuestLog: React.FC<QuestLogProps> = ({ plan, onClose }) => {
             {plan.plotPoints.map((point, index) => {
               const isCompleted = index < plan.currentPlotPointIndex;
               const isCurrent = index === plan.currentPlotPointIndex;
+              const isFuture = index > plan.currentPlotPointIndex;
               
+              if (isFuture) {
+                return (
+                  <li key={index} className="p-3 rounded-lg bg-gray-800/50 border border-gray-700/50 opacity-50">
+                    <div className="flex items-center gap-3">
+                      <FaQuestionCircle className="text-gray-500 w-5 h-5" />
+                      <span className="text-gray-500 italic">아직 밝혀지지 않은 여정...</span>
+                    </div>
+                  </li>
+                );
+              }
+
               return (
                 <li key={index} className={`p-3 rounded-lg transition-all duration-300 ${isCurrent ? 'bg-cyan-900/50 border-l-4 border-cyan-400' : 'bg-gray-700/50'}`}>
                   <div className="flex items-start gap-3">
@@ -59,10 +71,10 @@ const QuestLog: React.FC<QuestLogProps> = ({ plan, onClose }) => {
                     </div>
                     <div>
                       <h4 className={`font-bold ${isCurrent ? 'text-cyan-300' : 'text-gray-300'} ${isCompleted ? 'line-through text-gray-500' : ''}`}>
-                        {point.objective}
+                        {isCompleted ? "완료된 목표" : point.objective}
                       </h4>
-                      <p className={`text-sm mt-1 ${isCompleted ? 'text-gray-600' : 'text-gray-400'}`}>
-                        {point.details}
+                      <p className={`text-sm mt-1 ${isCompleted ? 'text-gray-500 italic' : 'text-gray-300'}`}>
+                        {isCompleted ? point.objective : point.details}
                       </p>
                     </div>
                   </div>

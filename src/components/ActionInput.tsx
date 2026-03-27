@@ -24,7 +24,7 @@ const ActionInput: React.FC<ActionInputProps> = ({ onSubmit, onOpenActionMenu, d
   };
 
   return (
-    <div className="w-full flex items-center gap-2">
+    <div className="w-full flex items-center gap-2 relative z-10">
        <button
         type="button"
         onClick={handleMenuOpen}

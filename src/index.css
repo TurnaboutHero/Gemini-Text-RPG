@@ -1,0 +1,67 @@
+@import "tailwindcss";
+
+@theme {
+  /* Design Tokens - Adventure Theme */
+  --color-primary: #D4AF37;    /* Gold: Value, Reward, Magic */
+  --color-secondary: #8B0000;  /* Crimson: Combat, Danger, Intensity */
+  --color-accent: #0EA5E9;     /* Sky: Arcane, Mana, Clarity */
+  
+  --color-bg-deep: #0F172A;    /* Deep Slate: Main Background */
+  --color-bg-card: #1E293B;    /* Slate: UI Panels */
+  
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-adventure: "IM Fell English", serif;
+
+  /* Custom Animations */
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(10px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  
+  @keyframes float-up {
+    from { transform: translateY(0) translateX(-50%); opacity: 1; }
+    to { transform: translateY(-50px) translateX(-50%); opacity: 0; }
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 5px rgba(56, 189, 248, 0.3); transform: scale(1); }
+    50% { box-shadow: 0 0 15px rgba(56, 189, 248, 0.6); transform: scale(1.05); }
+  }
+
+  --animate-fade-in: fade-in 0.5s ease-out forwards;
+  --animate-float-up: float-up 1.5s ease-out forwards;
+  --animate-pulse-glow: pulse-glow 2.5s infinite ease-in-out;
+}
+
+/* Global Styles */
+@layer base {
+  body {
+    @apply bg-bg-deep text-gray-200 font-sans antialiased;
+  }
+  
+  h1, h2, h3, .font-adventure {
+    @apply font-adventure tracking-wide;
+  }
+
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-bg-deep;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-700 rounded-full hover:bg-gray-600 transition-colors;
+  }
+}
+
+/* Utility Classes */
+@layer utilities {
+  .glass-panel {
+    @apply bg-bg-card/80 backdrop-blur-md border border-white/10 shadow-xl;
+  }
+  
+  .text-shadow-adventure {
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+  }
+}

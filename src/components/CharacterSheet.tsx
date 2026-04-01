@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Character, Item, ItemSlot, StatEffect, Ability } from '../types';
 import { ABILITIES } from '../dndData';
-import { FaCoins } from 'react-icons/fa';
+import { motion } from 'motion/react';
+import { Coins, X } from 'lucide-react';
 import Inventory from './Inventory';
 
 type CalculatedStats = {
@@ -77,11 +78,17 @@ const CharacterSheet: React.FC<CharacterSheetProps> = ({ character, calculatedSt
   }
 
   return (
-    <div 
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
       className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 fade-in"
       onClick={onClose}
     >
-      <div 
+      <motion.div 
+        initial={{ scale: 0.95, y: 20 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.95, y: 20 }}
         className="w-full max-w-md bg-gray-800/90 border border-cyan-500/30 rounded-lg shadow-lg shadow-cyan-500/20 p-6 text-gray-200 relative max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside
       >
@@ -90,9 +97,7 @@ const CharacterSheet: React.FC<CharacterSheetProps> = ({ character, calculatedSt
           className="absolute top-3 right-3 text-gray-400 hover:text-white transition-colors z-10"
           aria-label="캐릭터 시트 닫기"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
+          <X className="h-6 w-6" />
         </button>
 
         {/* Header */}
@@ -116,7 +121,7 @@ const CharacterSheet: React.FC<CharacterSheetProps> = ({ character, calculatedSt
           <h1 className="text-3xl font-bold text-white font-adventure tracking-wider mt-3">{character.name}</h1>
           <p className="text-md text-gray-400">{character.race} {character.class}</p>
           <div className="flex items-center gap-2 mt-1 text-yellow-400">
-            <FaCoins />
+            <Coins size={16} />
             <span className="font-bold">{character.gold} G</span>
           </div>
         </div>
@@ -178,7 +183,7 @@ const CharacterSheet: React.FC<CharacterSheetProps> = ({ character, calculatedSt
             </button>
         </div>
 
-      </div>
+      </motion.div>
 
       {showConfirmModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70 p-4">
@@ -204,7 +209,7 @@ const CharacterSheet: React.FC<CharacterSheetProps> = ({ character, calculatedSt
           </div>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 };
 

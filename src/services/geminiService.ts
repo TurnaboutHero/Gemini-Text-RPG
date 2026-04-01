@@ -1,15 +1,42 @@
 
 
-import { GoogleGenAI, Chat, Type, Modality, Content } from "@google/genai";
+import { GoogleGenAI, Chat, Type, Modality, Content, ThinkingLevel } from "@google/genai";
 import { GeminiResponse, Character, StoryLogEntry, StoryPartType, AiScenePart, ChapterPlan, ContentBlock, Npc, WorldMap, ItemSlot, ItemType, Ability, CombatState, GeminiCombatResponse, ImageModel } from '../types';
 import { SYSTEM_INSTRUCTION_INTERACTOR, SYSTEM_INSTRUCTION_PLANNER, SYSTEM_INSTRUCTION_COMBAT } from "../scenarioData";
+import { RACES, CLASSES, BACKGROUNDS } from "../dndData";
+import { RagService } from "./ragService";
+import { AgentOrchestrator, AgentHarness } from "./agentService";
+
+const getApiKey = () => (typeof process !== 'undefined' && process.env && process.env.API_KEY) || process.env.GEMINI_API_KEY || "";
+
+// Initialize core services
+const ragService = new RagService(getApiKey());
+const orchestrator = new AgentOrchestrator(getApiKey(), ragService);
+const harness = new AgentHarness(getApiKey());
+
+let isRagInitialized = false;
+
+/**
+ * Initialize RAG with game lore and data.
+ */
+const ensureRagInitialized = async () => {
+    if (isRagInitialized) return;
+
+    const loreData = [
+        ...RACES.map(r => `종족: ${r.name} - ${r.description}`),
+        ...CLASSES.map(c => `직업: ${c.name} - ${c.description}`),
+        ...BACKGROUNDS.map(b => `배경: ${b.name} - ${b.description}`),
+        `시스템 지침(플래너): ${SYSTEM_INSTRUCTION_PLANNER}`,
+        `시스템 지침(상호작용): ${SYSTEM_INSTRUCTION_INTERACTOR}`,
+        `시스템 지침(전투): ${SYSTEM_INSTRUCTION_COMBAT}`,
+    ];
+
+    await ragService.initialize(loreData);
+    isRagInitialized = true;
+};
 
 const getAiInstance = () => {
-    const apiKey = (typeof process !== 'undefined' && process.env && process.env.API_KEY) || process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-        throw new Error("API_KEY environment variable not set");
-    }
-    return new GoogleGenAI({ apiKey: apiKey });
+    return new GoogleGenAI({ apiKey: getApiKey() });
 };
 
 const itemSchema = {
@@ -46,6 +73,20 @@ const sceneResponseSchema = {
     properties: {
         sceneTitle: { type: Type.STRING, description: "현재 장면에 대한 짧고 연상적인 제목." },
         imagePrompt: { type: Type.STRING, description: "이미지 생성을 위한 간결하고 묘사적인 문구." },
+        contentBlocks: {
+            type: Type.ARRAY,
+            description: "이야기를 구성하는 블록들 (나레이션, 대사, 생각, 행동 등).",
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    type: { type: Type.STRING, enum: ['narration', 'dialogue', 'thought', 'action'] },
+                    text: { type: Type.STRING, nullable: true, description: "나레이션, 생각, 행동의 내용." },
+                    characterName: { type: Type.STRING, nullable: true, description: "대사일 경우 캐릭터 이름." },
+                    dialogue: { type: Type.STRING, nullable: true, description: "대사 내용." }
+                },
+                required: ["type"]
+            }
+        },
         suggestedActions: { type: Type.ARRAY, items: { type: Type.STRING }, description: "플레이어에게 제공할 3-4개의 추천 행동." },
         skillCheck: {
             type: Type.OBJECT, nullable: true,
@@ -73,6 +114,15 @@ const sceneResponseSchema = {
                     description: { type: Type.STRING, description: "NPC의 외모나 특징에 대한 간략한 묘사." },
                     imagePrompt: { type: Type.STRING, description: "NPC 초상화 생성을 위한 이미지 프롬프트." },
                 }, required: ["name", "description", "imagePrompt"]
+            }
+        },
+        npcAffinityChanges: {
+            type: Type.ARRAY, nullable: true, description: "NPC와의 상호작용에 따른 호감도 변화.",
+            items: {
+                type: Type.OBJECT, properties: {
+                    npcName: { type: Type.STRING, description: "호감도가 변하는 NPC의 이름." },
+                    change: { type: Type.INTEGER, description: "호감도 변화량 (예: 5, -10)." },
+                }, required: ["npcName", "change"]
             }
         },
         isChapterComplete: { type: Type.BOOLEAN, nullable: true },
@@ -109,7 +159,7 @@ const sceneResponseSchema = {
             required: ["shopName", "items"]
         }
     },
-    required: ["sceneTitle", "imagePrompt", "suggestedActions"],
+    required: ["sceneTitle", "imagePrompt", "suggestedActions", "contentBlocks"],
 };
 
 const chapterPlanSchema = {
@@ -183,6 +233,14 @@ const combatResponseSchema = {
                 duration: { type: Type.INTEGER, description: "상태 이상의 지속 턴 수." }
             }
         },
+        statusEffectRemoved: {
+            type: Type.OBJECT,
+            nullable: true,
+            properties: {
+                target: { type: Type.STRING, description: "'player' 또는 적의 ID." },
+                name: { type: Type.STRING, description: "해제된 상태 이상의 이름." }
+            }
+        },
         skillUsed: { type: Type.STRING, nullable: true, description: "사용된 스킬의 이름." }
     },
     required: ["combatLogEntry"]
@@ -192,6 +250,11 @@ const combatResponseSchema = {
 const handleImageGenerationError = (error: unknown, context: string): Error => {
     console.error(`Error generating image (${context}):`, error);
     const errorMessage = error instanceof Error ? error.message : String(error);
+    
+    if (errorMessage.includes('PERMISSION_DENIED') || errorMessage.includes('403')) {
+        return new Error('API 키 권한이 없거나 유효하지 않습니다. 설정 메뉴에서 유료 프로젝트의 API 키를 다시 선택해 주세요.');
+    }
+    
     if (errorMessage.includes('RESOURCE_EXHAUSTED') || errorMessage.includes('quota')) {
         return new Error('API 이미지 생성 할당량을 초과했습니다. Google AI Studio에서 요금제를 확인하거나 잠시 후 다시 시도해 주세요.');
     }
@@ -199,149 +262,82 @@ const handleImageGenerationError = (error: unknown, context: string): Error => {
 };
 
 export const generateChapterPlan = async (character: Character, previousChapterSummaries: string[]): Promise<Omit<ChapterPlan, 'mapImageUrl'>> => {
-    const MAX_RETRIES = 3;
-    let lastError: string | null = null;
-
     console.log("generateChapterPlan started");
 
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-        try {
-            console.log(`generateChapterPlan attempt ${attempt}`);
-            const characterInfo = `플레이어 캐릭터: ${character.name}, ${character.race} ${character.class}.`;
-            const summaryInfo = previousChapterSummaries.length > 0
-                ? `\n\n**이전 모험 요약:**\n- ${previousChapterSummaries.join('\n- ')}`
-                : "";
-            
-            let prompt = `${characterInfo}${summaryInfo}\n\n위 정보를 바탕으로 이 캐릭터의 다음 모험 챕터 계획을 세워주세요.\n\n**매우 중요:**\n응답은 제공된 JSON 스키마를 **반드시** 준수해야 합니다. 'locations' 필드는 **필수 항목**이며, 절대 생략하거나 빈 배열로 두어서는 안 됩니다. 이 규칙을 위반하면 결과가 실패 처리됩니다. 모든 텍스트는 한국어로 작성해주세요.`;
-            
-            if (attempt > 1) {
-                const example = `
-"locations": [
-  {
-    "id": "village_square",
-    "name": "마을 광장",
-    "description": "활기찬 시장과 우물이 있는 마을의 중심부입니다.",
-    "exits": [
-      { "direction": "북쪽", "locationId": "tavern" },
-      { "direction": "동쪽", "locationId": "blacksmith" }
-    ]
-  },
-  {
-    "id": "tavern",
-    "name": "주점",
-    "description": "모험가들이 모여 정보를 교환하는 시끄러운 곳입니다.",
-    "exits": [
-      { "direction": "남쪽", "locationId": "village_square" }
-    ]
-  }
-]`;
-                const failureReason = lastError || "'locations' 필드가 누락되었거나 형식이 잘못되었습니다.";
-                prompt += `\n\n**수정 지시:** 이전 시도가 실패했습니다 (실패 사유: ${failureReason}). 응답을 다시 생성하세요. **'locations' 필드를 반드시 포함하고, 제공된 JSON 스키마의 모든 요구사항을 완벽하게 준수해야 합니다.** 아래는 'locations' 필드의 올바른 예시입니다:\n${example}`;
-            }
-            
-            const ai = getAiInstance();
-            console.log("Calling ai.models.generateContent for chapter plan");
-            const response = await ai.models.generateContent({
-                model: 'gemini-3.1-pro-preview',
-                contents: prompt,
-                config: {
-                    systemInstruction: SYSTEM_INSTRUCTION_PLANNER,
-                    responseMimeType: "application/json",
-                    responseSchema: chapterPlanSchema,
-                },
-            });
-            console.log("Received response for chapter plan");
-            const parsedResponse = JSON.parse(response.text.trim());
+    try {
+        const characterInfo = `플레이어 캐릭터: ${character.name}, ${character.race} ${character.class}.`;
+        const summaryInfo = previousChapterSummaries.length > 0
+            ? `\n\n**이전 모험 요약:**\n- ${previousChapterSummaries.join('\n- ')}`
+            : "\n\n**참고:** 이것은 플레이어의 첫 번째 모험입니다. 반드시 안전한 마을, 주점, 또는 모험가 길드 같은 '거점(Town/Safe Zone)'에서 시작하여, 정보를 수집하고 준비할 수 있도록 챕터를 설계하세요. 첫 번째 장소(locations[0])는 반드시 이 거점이어야 합니다. 바로 던전이나 전투로 시작하지 마세요.";
+        
+        const prompt = `${characterInfo}${summaryInfo}\n\n위 정보를 바탕으로 이 캐릭터의 다음 모험 챕터 계획을 세워주세요.\n\n**매우 중요:**\n응답은 제공된 JSON 스키마를 **반드시** 준수해야 합니다. 'locations' 필드는 **필수 항목**이며, 절대 생략하거나 빈 배열로 두어서는 안 됩니다. 첫 번째 장소는 반드시 안전한 마을이나 거점이어야 합니다. 모든 텍스트는 한국어로 작성해주세요.`;
+        
+        // Use Harness for structured execution and validation
+        const parsedResponse = await harness.execute<any>({
+            model: 'gemini-3.1-pro-preview',
+            systemInstruction: SYSTEM_INSTRUCTION_PLANNER,
+            prompt,
+            schema: chapterPlanSchema,
+            thinkingLevel: ThinkingLevel.HIGH
+        });
 
-            let locationsArray: any[] | undefined;
-            let validationError: string | null = null;
-
-            if (!parsedResponse.locations) {
-                validationError = "'locations' 필드가 누락되었습니다.";
-            } else if (Array.isArray(parsedResponse.locations)) {
-                locationsArray = parsedResponse.locations;
-            } else if (typeof parsedResponse.locations === 'object' && parsedResponse.locations !== null) {
-                console.warn("AI가 'locations'를 객체로 반환하여 배열로 변환합니다.");
-                locationsArray = Object.entries(parsedResponse.locations).map(([id, locData]) => ({
-                    id,
-                    ...(locData as object),
-                }));
-            } else {
-                validationError = `'locations' 필드가 배열이나 객체가 아닙니다 (타입: ${typeof parsedResponse.locations}).`;
-            }
-
-            if (locationsArray) {
-                 const validLocations = locationsArray.filter((loc: any) =>
-                    loc && typeof loc.id === 'string' && loc.id.trim() !== '' &&
-                    typeof loc.name === 'string' && loc.name.trim() !== ''
-                );
-                
-                if (validLocations.length > 0) {
-                    const worldMap: WorldMap = validLocations.reduce((acc: WorldMap, loc: any) => {
-                        const exitsMap: Record<string, string> = (loc.exits || []).reduce((exitAcc: Record<string, string>, exit: { direction: string; locationId: string; }) => {
-                            if (exit && exit.direction && exit.locationId) {
-                                exitAcc[exit.direction] = exit.locationId;
-                            }
-                            return exitAcc;
-                        }, {});
-                        acc[loc.id] = { ...loc, exits: exitsMap };
-                        return acc;
-                    }, {});
-
-                    console.log("generateChapterPlan succeeded");
-                    return {
-                        ...parsedResponse,
-                        plotPoints: (parsedResponse.plotPoints || []).map((p: any) => ({ ...p, completed: false })),
-                        currentPlotPointIndex: 0,
-                        locations: worldMap,
-                    };
-                } else {
-                    validationError = "'locations' 배열이 비어 있거나 유효한 장소(id, name 필요)가 없습니다.";
-                }
-            } else if (!validationError) {
-                validationError = "'locations' 필드의 형식이 잘못되었습니다.";
-            }
-            
-            console.error(`Attempt ${attempt}: Chapter plan generation validation failed: ${validationError}. Raw response:`, response.text.trim());
-            lastError = validationError;
-
-        } catch (error) {
-            console.error(`챕터 계획 생성 시도 ${attempt} 중 오류 발생:`, error);
-            if (error instanceof Error) {
-                lastError = error.message;
-            } else {
-                lastError = String(error);
-            }
+        let locationsArray: any[] | undefined;
+        if (Array.isArray(parsedResponse.locations)) {
+            locationsArray = parsedResponse.locations;
+        } else if (typeof parsedResponse.locations === 'object' && parsedResponse.locations !== null) {
+            locationsArray = Object.entries(parsedResponse.locations).map(([id, locData]) => ({
+                id,
+                ...(locData as object),
+            }));
         }
+
+        if (locationsArray && locationsArray.length > 0) {
+            const worldMap: WorldMap = locationsArray.reduce((acc: WorldMap, loc: any) => {
+                const exitsMap: Record<string, string> = (loc.exits || []).reduce((exitAcc: Record<string, string>, exit: { direction: string; locationId: string; }) => {
+                    if (exit && exit.direction && exit.locationId) {
+                        exitAcc[exit.direction] = exit.locationId;
+                    }
+                    return exitAcc;
+                }, {});
+                acc[loc.id] = { ...loc, exits: exitsMap };
+                return acc;
+            }, {});
+
+            return {
+                ...parsedResponse,
+                plotPoints: (parsedResponse.plotPoints || []).map((p: any) => ({ ...p, completed: false })),
+                currentPlotPointIndex: 0,
+                locations: worldMap,
+            };
+        }
+        throw new Error("Invalid locations data");
+    } catch (error) {
+        console.error("AI가 유효한 챕터 계획을 생성하지 못했습니다. 대체 계획을 생성합니다.", error);
+        const fallbackLocations: WorldMap = {
+            "fallback_start": {
+                id: "fallback_start",
+                name: "평화로운 국경 마을, '아스테리아'",
+                description: "따스한 햇살이 내리쬐는 평화로운 마을입니다. 사람들은 활기차게 하루를 시작하고 있으며, 중앙 광장의 분수대 소리가 평화롭게 울려 퍼집니다. 이곳에서 모험을 준비할 수 있습니다.",
+                exits: { "동쪽 숲길": "fallback_path" }
+            },
+            "fallback_path": {
+                id: "fallback_path",
+                name: "오래된 숲길",
+                description: "마을 외곽으로 이어지는 이끼 낀 나무들 사이의 좁은 길입니다. 길 끝에서 무언가 불길한 기운이 느껴집니다.",
+                exits: { "서쪽 마을": "fallback_start" }
+            }
+        };
+        return {
+            chapterTitle: "모험의 서막: 아스테리아의 부름",
+            overallGoal: "마을 사람들과 대화하여 주변의 소문을 수집하고, 첫 번째 모험을 위한 준비를 마치세요.",
+            plotPoints: [
+                { objective: "마을 광장에서 정보를 수집하세요.", details: "마을 사람들과 대화하여 최근의 소문을 들어보세요.", completed: false },
+                { objective: "숲길을 조사하세요.", details: "마을 외곽의 숲길에서 느껴지는 불길한 기운의 정체를 확인하세요.", completed: false }
+            ],
+            currentPlotPointIndex: 0,
+            locations: fallbackLocations,
+        };
     }
-    
-    // If loop finishes, all retries have failed. Create a fallback plan.
-    console.error("AI가 모든 재시도 후에도 유효한 챕터 계획을 생성하지 못했습니다. 대체 계획을 생성합니다.");
-    const fallbackLocations: WorldMap = {
-        "fallback_start": {
-            id: "fallback_start",
-            name: "신비로운 숲 속 공터",
-            description: "안개가 자욱한 숲의 한가운데, 고요한 공터에 서 있습니다. 모험이 당신을 기다립니다.",
-            exits: { "동쪽 숲길": "fallback_path" }
-        },
-        "fallback_path": {
-            id: "fallback_path",
-            name: "오래된 숲길",
-            description: "이끼 낀 나무들 사이로 좁은 길이 나 있습니다. 길 끝에서 무언가 빛나고 있습니다.",
-            exits: { "서쪽 공터": "fallback_start" }
-        }
-    };
-    const fallbackPlan = {
-        chapterTitle: "미지의 시작",
-        overallGoal: "이 신비로운 숲을 탐험하고 무슨 일이 일어나고 있는지 알아내세요.",
-        plotPoints: [
-            { objective: "주변을 조사하고 단서를 찾으세요.", details: "공터에서 단서를 찾아보세요.", completed: false },
-            { objective: "숲길을 따라가세요.", details: "길 끝에 무엇이 있는지 확인하세요.", completed: false }
-        ],
-        currentPlotPointIndex: 0,
-        locations: fallbackLocations,
-    };
-    return fallbackPlan;
 };
 
 export const generateSceneState = async (
@@ -356,122 +352,52 @@ export const generateSceneState = async (
     currentDay: number,
     chapterSummaries: string[] = [],
 ): Promise<GeminiResponse> => {
-    let lastError = '';
     console.log("generateSceneState started for action:", playerAction);
-    for (let attempt = 1; attempt <= 3; attempt++) {
-        try {
-            console.log(`generateSceneState attempt ${attempt}`);
-            const history = convertStoryLogToHistory(storyLog, chapterSummaries);
-            const ai = getAiInstance();
-            const chat = ai.chats.create({
-                model: 'gemini-3.1-flash-lite-preview',
-                history: history,
-                config: {
-                    systemInstruction: SYSTEM_INSTRUCTION_INTERACTOR,
-                    responseMimeType: "application/json",
-                    responseSchema: sceneResponseSchema,
-                },
-            });
-
-            const currentPlotPoint = chapterPlan.plotPoints[chapterPlan.currentPlotPointIndex] || { objective: '알 수 없음' };
-            const currentLocation = currentLocationId && worldMap ? worldMap[currentLocationId] : null;
-
-            const getTimeOfDay = (hour: number) => {
-                if (hour >= 5 && hour < 12) return '아침';
-                if (hour >= 12 && hour < 18) return '낮';
-                if (hour >= 18 && hour < 22) return '저녁';
-                return '밤';
-            };
-            const timeOfDay = getTimeOfDay(currentTime);
-            
-            const contextForModel = `
-            **현재 시간:** ${currentDay}일차, ${currentTime}시 (${timeOfDay})
-            **현재 챕터:** "${chapterPlan.chapterTitle}"
-            **챕터 목표:** ${chapterPlan.overallGoal}
-            **현재 단계 목표:** ${currentPlotPoint.objective}
-            **현재 위치:** ${currentLocation ? `${currentLocation.name} (${currentLocation.description})` : '알 수 없음'}
-            **사용 가능한 출구:** ${currentLocation ? Object.keys(currentLocation.exits).join(', ') : '없음'}
-            **현재 등장인물:** ${[character.name, ...Object.keys(npcs)].join(', ')}
-            **캐릭터 상태:** HP ${character.hp}/${character.maxHp}, MP ${character.mp}/${character.maxMp}, 소지품: ${character.inventory.map(i => i.name).join(', ') || '없음'}, 소지금: ${character.gold} G
-            **보유 스킬:** ${character.skills.map(s => s.name).join(', ') || '없음'}
-            
-            ---
-            **플레이어 행동:** "${playerAction}"
-            ---
-            
-            위 맥락에 따라 플레이어의 행동에 대한 게임 시스템적 결과(체력 변화, 아이템, 이동 등)를 계산하여 JSON으로 응답하세요.
-            `;
-            console.log("Calling chat.sendMessage for scene state");
-            const result = await chat.sendMessage({ message: contextForModel });
-            console.log("Received response for scene state");
-            const text = result.text.trim();
-            return JSON.parse(text);
-        } catch (error) {
-            console.error(`Error generating scene state (attempt ${attempt}):`, error);
-            lastError = error instanceof Error ? error.message : String(error);
-        }
-    }
-    throw new Error(`상태를 계산할 수 없습니다. AI가 응답하지 않습니다. (${lastError})`);
-};
-
-export const generateNarrativeStream = async function* (
-    character: Character,
-    storyLog: StoryLogEntry[],
-    playerAction: string,
-    sceneState: GeminiResponse,
-    chapterPlan: ChapterPlan,
-    currentLocationId: string | null,
-    worldMap: WorldMap | null,
-    chapterSummaries: string[] = [],
-): AsyncGenerator<string, void, unknown> {
     try {
-        console.log("generateNarrativeStream started");
-        const history = convertStoryLogToHistory(storyLog, chapterSummaries);
-        const ai = getAiInstance();
-        const chat = ai.chats.create({
-            model: 'gemini-3.1-flash-lite-preview',
-            history: history,
-            config: {
-                systemInstruction: `당신은 D&D 어드벤처 게임의 스토리텔러입니다. 시스템 에이전트가 계산한 결과를 바탕으로 유저가 읽을 몰입감 넘치는 소설 같은 텍스트를 작성합니다.
-- Markdown 형식을 사용하여 자유롭게 작성하세요.
-- 대화는 따옴표를 사용하고, 생각을 표현할 때는 이탤릭체를 사용하세요.
-- 시스템의 계산 결과(예: 데미지, 아이템 획득)를 자연스럽게 이야기 속에 녹여내세요.
-- 절대로 JSON 형식으로 응답하지 마세요. 오직 이야기 텍스트만 출력하세요.`,
-            },
-        });
+        await ensureRagInitialized();
 
+        const history = convertStoryLogToHistory(storyLog, chapterSummaries);
         const currentPlotPoint = chapterPlan.plotPoints[chapterPlan.currentPlotPointIndex] || { objective: '알 수 없음' };
         const currentLocation = currentLocationId && worldMap ? worldMap[currentLocationId] : null;
 
+        const getTimeOfDay = (hour: number) => {
+            if (hour >= 5 && hour < 12) return '아침';
+            if (hour >= 12 && hour < 18) return '낮';
+            if (hour >= 18 && hour < 22) return '저녁';
+            return '밤';
+        };
+        const timeOfDay = getTimeOfDay(currentTime);
+        
         const contextForModel = `
+        **현재 시간:** ${currentDay}일차, ${currentTime}시 (${timeOfDay})
         **현재 챕터:** "${chapterPlan.chapterTitle}"
+        **챕터 목표:** ${chapterPlan.overallGoal}
         **현재 단계 목표:** ${currentPlotPoint.objective}
         **현재 위치:** ${currentLocation ? `${currentLocation.name} (${currentLocation.description})` : '알 수 없음'}
+        **사용 가능한 출구:** ${currentLocation ? Object.keys(currentLocation.exits).join(', ') : '없음'}
+        **현재 등장인물:** ${[character.name, ...Object.keys(npcs)].join(', ')}
+        **캐릭터 상태:** HP ${character.hp}/${character.maxHp}, MP ${character.mp}/${character.maxMp}, 소지품: ${character.inventory.map(i => i.name).join(', ') || '없음'}, 소지금: ${character.gold} G
+        **보유 스킬:** ${character.skills.map(s => s.name).join(', ') || '없음'}
         
         ---
-        **플레이어 행동:** "${playerAction}"
-        ---
-        **시스템 계산 결과 (이 내용을 스토리에 반영하세요):**
-        ${JSON.stringify(sceneState, null, 2)}
-        ---
-        
-        위 맥락과 시스템 계산 결과를 바탕으로, 플레이어의 행동에 대한 결과를 서술하고 이야기를 계속 진행하세요.
+        **이전 대화 기록:**
+        ${JSON.stringify(history)}
         `;
 
-        console.log("Calling chat.sendMessageStream for narrative");
-        const responseStream = await chat.sendMessageStream({ message: contextForModel });
-        let chunkCount = 0;
-        for await (const chunk of responseStream) {
-            if (chunk.text) {
-                chunkCount++;
-                if (chunkCount === 1) console.log("Received first chunk of narrative stream");
-                yield chunk.text;
-            }
-        }
-        console.log(`generateNarrativeStream completed, yielded ${chunkCount} chunks`);
+        // Use Orchestrator for Multi-Agent & RAG
+        const result = await orchestrator.processTurn({
+            action: playerAction,
+            gameState: { character, chapterPlan, currentLocationId, worldMap, npcs },
+            isCombat: false,
+            sceneSchema: sceneResponseSchema,
+            combatSchema: combatResponseSchema,
+            context: contextForModel
+        }) as GeminiResponse;
+
+        return result;
     } catch (error) {
-        console.error("Error generating narrative stream:", error);
-        yield "\n\n(이야기를 생성하는 도중 오류가 발생했습니다.)";
+        console.error("Error generating scene state:", error);
+        throw new Error(`상태를 계산할 수 없습니다. AI가 응답하지 않습니다.`);
     }
 };
 
@@ -480,66 +406,73 @@ export const generateCombatTurnResult = async (
     combatState: CombatState,
     playerAction: string
 ): Promise<GeminiCombatResponse> => {
-    let lastError = '';
-    for (let attempt = 1; attempt <= 3; attempt++) {
-        try {
-            const enemiesInfo = combatState.enemies.map(e => `- ${e.name} (ID: ${e.id}, HP: ${e.hp}/${e.maxHp})`).join('\n');
-            const target = combatState.playerTargetId ? combatState.enemies.find(e => e.id === combatState.playerTargetId) : null;
-            
-            const prompt = `
-            **전투 상황:**
-            - 플레이어: ${character.name} (HP: ${character.hp}/${character.maxHp}, MP: ${character.mp}/${character.maxMp})
-            - 보유 스킬: ${character.skills.map(s => `${s.name} (MP 소모: ${s.mpCost})`).join(', ') || '없음'}
-            - 적들:
-            ${enemiesInfo}
-            - 현재 목표: ${target ? `${target.name} (ID: ${target.id})` : '없음'}
+    try {
+        await ensureRagInitialized();
 
-            ---
-            **플레이어 행동:** "${playerAction}"
-            ---
+        const contextForModel = `
+        **캐릭터 상태:** HP ${character.hp}/${character.maxHp}, MP ${character.mp}/${character.maxMp}, 소지품: ${character.inventory.map(i => i.name).join(', ') || '없음'}, 소지금: ${character.gold} G
+        **보유 스킬:** ${character.skills.map(s => s.name).join(', ') || '없음'}
+        `;
 
-            위 상황을 바탕으로 플레이어 행동의 결과를 판정하고 JSON으로 응답하세요.
-            `;
-            
-            const ai = getAiInstance();
-            const response = await ai.models.generateContent({
-                model: 'gemini-3.1-flash-lite-preview',
-                contents: prompt,
-                config: {
-                    systemInstruction: SYSTEM_INSTRUCTION_COMBAT,
-                    responseMimeType: "application/json",
-                    responseSchema: combatResponseSchema,
-                    thinkingConfig: { thinkingBudget: 0 },
-                },
-            });
-            
-            return JSON.parse(response.text.trim());
-        } catch (error) {
-            console.error(`Error generating combat turn result (attempt ${attempt}):`, error);
-            lastError = error instanceof Error ? error.message : String(error);
-        }
+        // Use Orchestrator for Multi-Agent combat resolution
+        const result = await orchestrator.processTurn({
+            action: playerAction,
+            gameState: { combat: combatState, character },
+            isCombat: true,
+            sceneSchema: sceneResponseSchema,
+            combatSchema: combatResponseSchema,
+            context: contextForModel
+        }) as GeminiCombatResponse;
+
+        return result;
+    } catch (error) {
+        console.error("Error generating combat turn result:", error);
+        throw new Error(`전투를 진행할 수 없습니다. AI가 응답하지 않습니다.`);
     }
-    throw new Error(`전투를 진행할 수 없습니다. AI가 응답하지 않습니다. (${lastError})`);
+};
+
+export const summarizeStoryLog = async (storyLog: StoryLogEntry[]): Promise<string> => {
+    try {
+        const logText = storyLog.map(entry => {
+            if (entry.type === StoryPartType.USER) return `플레이어: ${entry.text}`;
+            if (entry.type === StoryPartType.AI_SCENE) return `DM: ${entry.text || ''}`;
+            return '';
+        }).join('\n');
+
+        const ai = getAiInstance();
+        const response = await ai.models.generateContent({
+            model: 'gemini-3.1-flash-lite-preview',
+            contents: `다음은 RPG 게임의 진행 로그입니다. 지금까지의 핵심 사건, 획득한 아이템, NPC와의 관계 변화 등을 중심으로 아주 간결하게 요약해주세요. 이 요약은 다음 AI 모델의 컨텍스트로 사용됩니다.\n\n${logText}`,
+        });
+        return response.text.trim();
+    } catch (error) {
+        console.error("Error summarizing story log:", error);
+        return "이전 로그 요약 실패";
+    }
 };
 
 const convertStoryLogToHistory = (storyLog: StoryLogEntry[], chapterSummaries: string[] = []): Content[] => {
     const history: Content[] = [];
     
+    // 1. Add overall chapter summaries as context
     if (chapterSummaries.length > 0) {
         history.push({
             role: 'user',
-            parts: [{ text: `[이전 스토리 요약]\n${chapterSummaries.join('\n')}` }]
+            parts: [{ text: `[지금까지의 모험 요약]\n${chapterSummaries.join('\n')}` }]
         });
         history.push({
             role: 'model',
-            parts: [{ text: "네, 이전 스토리 요약을 숙지했습니다. 현재 상황에 맞춰 다음 진행을 이어가겠습니다." }]
+            parts: [{ text: "네, 지금까지의 모험 내용을 숙지했습니다. 현재 상황에 맞춰 다음 진행을 이어가겠습니다." }]
         });
     }
 
-    // Keep only the last 10 interactions (20 entries) to prevent context window bloat
-    const MAX_HISTORY_ENTRIES = 20;
-    const recentLog = storyLog.slice(-MAX_HISTORY_ENTRIES);
+    // 2. Implement a sliding window for recent interactions
+    // If the log is very long, we only take the most recent part and assume the rest is in summaries
+    const MAX_RECENT_ENTRIES = 10;
+    const recentLog = storyLog.slice(-MAX_RECENT_ENTRIES);
 
+    // 3. If there's a significant gap between summaries and recent log, we could add a "Mid-term Summary" here
+    // For now, we'll just use the sliding window
     for (const entry of recentLog) {
       if (entry.type === StoryPartType.USER) {
         history.push({ role: 'user', parts: [{ text: entry.text }] });
@@ -591,15 +524,34 @@ export const generateSummary = async (chapterSummaries: string[], storyLog: Stor
     }
 };
 
+const buildImagePrompt = (basePrompt: string, type: 'scene' | 'character' | 'map' | 'item' = 'scene'): string => {
+    const style = "Epic fantasy digital painting, highly detailed, cinematic lighting, masterpiece, 8k, concept art";
+    const lighting = "dramatic shadows, atmospheric glow";
+    
+    switch (type) {
+        case 'character':
+            return `${style}, full body portrait, centered, ${lighting}. ${basePrompt}`;
+        case 'map':
+            return `Top-down fantasy world map, aged parchment texture, detailed cartography, hand-drawn style with intricate details. ${basePrompt}`;
+        case 'item':
+            return `${style}, close-up of a magical item, glowing effects, ${lighting}. ${basePrompt}`;
+        case 'scene':
+        default:
+            return `${style}, wide angle landscape, immersive atmosphere, ${lighting}. ${basePrompt}`;
+    }
+};
+
 export const generateInitialImage = async (prompt: string, model: ImageModel = 'gemini-2.5-flash-image'): Promise<string> => {
     try {
         console.log("generateInitialImage started");
         const ai = getAiInstance();
+        const fullPrompt = buildImagePrompt(prompt, 'scene');
+
         if (model === 'imagen-4.0-generate-001') {
             console.log("Calling ai.models.generateImages for initial image");
             const response = await ai.models.generateImages({
                 model: model,
-                prompt: `Epic fantasy adventure game screen, digital painting, atmospheric lighting, wide angle. ${prompt}`,
+                prompt: fullPrompt,
                 config: {
                     numberOfImages: 1,
                     aspectRatio: "16:9",
@@ -615,7 +567,7 @@ export const generateInitialImage = async (prompt: string, model: ImageModel = '
             model: model,
             contents: {
                 parts: [
-                    { text: `Epic fantasy adventure game screen, digital painting, atmospheric lighting, wide angle. ${prompt}` }
+                    { text: fullPrompt }
                 ]
             },
             config: {
@@ -649,7 +601,7 @@ export const generateMapImage = async (worldMap: WorldMap, model: ImageModel = '
             return `"${loc.name}"(${loc.description}). ${exitInfo}.`;
         }).join('\n');
 
-        const prompt = `Top-down fantasy world map, old parchment paper texture, hand-drawn style with intricate details, geographic elements like forests, mountains, rivers should be visible. The map illustrates the following connected locations:\n${locationDescriptions}\nEnsure all named locations are clearly visible and connected according to the description.`;
+        const prompt = buildImagePrompt(`The map illustrates the following connected locations:\n${locationDescriptions}\nEnsure all named locations are clearly visible and connected according to the description.`, 'map');
         
         const ai = getAiInstance();
         if (model === 'imagen-4.0-generate-001') {
@@ -704,11 +656,12 @@ export const generateCharacterImage = async (
 ): Promise<string> => {
     try {
         const ai = getAiInstance();
+        const fullPrompt = buildImagePrompt(characterPrompt, 'character');
+
         if (model === 'imagen-4.0-generate-001') {
-             const prompt = `Epic fantasy RPG character portrait, digital painting, detailed face. ${characterPrompt}. Centered, atmospheric lighting, high quality.`;
              const response = await ai.models.generateImages({
                 model: model,
-                prompt: prompt,
+                prompt: fullPrompt,
                 config: {
                     numberOfImages: 1,
                     aspectRatio: "1:1",
@@ -723,8 +676,7 @@ export const generateCharacterImage = async (
             if (!base64Data) throw new Error("잘못된 참고 이미지 형식입니다.");
             const mimeType = referenceImageBase64.match(/data:(.*);base64,/)?.[1] || 'image/jpeg';
             const imagePart = { inlineData: { data: base64Data, mimeType: mimeType } };
-            const textPart = { text: `이 이미지를 참고하여 서사적인 판타지 RPG 캐릭터 초상화를 만들어주세요. 캐릭터 설명: "${characterPrompt}". 참고 이미지의 스타일을 유지하면서 이 설명에 맞게 캐릭터를 그려주세요. 디지털 페인팅 스타일과 분위기 있는 조명을 사용해주세요.` };
-            const ai = getAiInstance();
+            const textPart = { text: `이 이미지를 참고하여 캐릭터 초상화를 만들어주세요. ${fullPrompt}. 참고 이미지의 스타일을 유지하면서 이 설명에 맞게 캐릭터를 그려주세요.` };
             const response = await ai.models.generateContent({
                 model: model,
                 contents: { parts: [imagePart, textPart] },
@@ -743,13 +695,11 @@ export const generateCharacterImage = async (
             }
             throw new Error("AI가 참고 이미지를 기반으로 이미지를 반환하지 않았습니다.");
         } else {
-            const prompt = `Epic fantasy RPG character portrait, digital painting, detailed face. ${characterPrompt}. Centered, atmospheric lighting, high quality.`;
-            const ai = getAiInstance();
             const response = await ai.models.generateContent({
                 model: model,
                 contents: {
                     parts: [
-                        { text: prompt }
+                        { text: fullPrompt }
                     ]
                 },
                 config: {
@@ -775,8 +725,6 @@ export const generateCharacterImage = async (
 export const editImage = async (prompt: string, base64ImageData: string, model: ImageModel = 'gemini-2.5-flash-image'): Promise<string | null> => {
     try {
         if (model === 'imagen-4.0-generate-001') {
-            // Imagen 4.0 doesn't support direct editing in the same way as Gemini Flash Image yet in this SDK
-            // We fallback to generation or just return null if not supported
             return null; 
         }
 
@@ -801,5 +749,32 @@ export const editImage = async (prompt: string, base64ImageData: string, model: 
         }
         console.error("Error editing image:", error);
         return null;
+    }
+};
+
+export const analyzeUi = async (currentLayout: string): Promise<string> => {
+    try {
+        const ai = getAiInstance();
+        const prompt = `당신은 숙련된 UX/UI 디자이너이자 프론트엔드 개발자입니다. 현재 게임의 UI 구조는 다음과 같습니다:
+        
+        ${currentLayout}
+        
+        이 UI의 잠재적인 문제점을 지적하고, 사용자 경험(UX)을 향상시키기 위한 구체적인 개선 방안을 제안해주세요. 
+        특히 다음 항목들에 집중해주세요:
+        1. 시각적 계층 구조 (Hierarchy)
+        2. 가독성 및 타이포그래피
+        3. 상호작용 피드백 (Interaction Feedback)
+        4. 모바일 응답성 및 접근성
+        
+        응답은 한국어로, 친절하고 전문적인 톤으로 작성해주세요.`;
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-3.1-pro-preview',
+            contents: prompt,
+        });
+        return response.text.trim();
+    } catch (error) {
+        console.error("Error analyzing UI:", error);
+        return "UI 분석 중 오류가 발생했습니다.";
     }
 };

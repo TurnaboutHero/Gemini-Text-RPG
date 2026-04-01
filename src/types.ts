@@ -75,12 +75,14 @@ export interface Npc {
     name: string;
     description: string;
     imageUrl: string;
+    affinity: number; // 0-100
 }
 
 export interface AiScenePart {
   id: string;
   type: StoryPartType.AI_SCENE;
   text: string;
+  contentBlocks?: ContentBlock[];
   sceneTitle: string;
   imagePrompt: string;
   imageUrl: string;
@@ -172,6 +174,9 @@ export enum SpecialActionType {
   SUMMARY = 'SUMMARY',
   TALK_TO_NPC = 'TALK_TO_NPC',
   USE_ITEM = 'USE_ITEM',
+  DESCRIBE_CHARACTER = 'DESCRIBE_CHARACTER',
+  DESCRIBE_ENVIRONMENT = 'DESCRIBE_ENVIRONMENT',
+  INITIATE_CONVERSATION = 'INITIATE_CONVERSATION',
 }
 
 export interface SpecialAction {
@@ -187,6 +192,8 @@ export interface Enemy {
   attack: number;
   defense: number;
   imageUrl: string;
+  statusEffects?: string[];
+  isShaking?: boolean;
 }
 
 export interface UiEffect {
@@ -229,8 +236,10 @@ export interface GameState {
   useImageGeneration: boolean;
   imageModel: ImageModel;
   hasApiKey: boolean;
+  currentSceneImageUrl: string | null;
   locationImages: Record<string, string>;
   entityImages: Record<string, string>;
+  isShaking?: boolean;
 }
 
 type GeminiItem = {
@@ -246,6 +255,7 @@ export interface GeminiResponse {
   sceneTitle: string;
   imagePrompt: string;
   text?: string;
+  contentBlocks?: ContentBlock[];
   suggestedActions: string[];
   skillCheck?: SkillCheck;
   xpGained?: number;
@@ -257,6 +267,7 @@ export interface GeminiResponse {
   isPlotPointComplete?: boolean;
   imageGenerationSetting?: 'NONE' | 'EDIT' | 'GENERATE';
   newNpcs?: { name: string; description: string; imagePrompt: string }[];
+  npcAffinityChanges?: { npcName: string; change: number }[];
   goldChange?: number;
   playerMovedTo?: string; // New location ID
   timeElapsed?: number; // in hours
@@ -292,6 +303,10 @@ export interface GeminiCombatResponse {
     target: 'player' | string; // 'player' or enemyId
     name: string;
     duration: number; // in turns
+  };
+  statusEffectRemoved?: {
+    target: 'player' | string;
+    name: string;
   };
   skillUsed?: string; // name of skill
 }

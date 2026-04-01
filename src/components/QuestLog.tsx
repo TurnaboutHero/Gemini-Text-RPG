@@ -1,6 +1,6 @@
 import React from 'react';
 import { ChapterPlan } from '../types';
-import { FaTimes, FaBullseye, FaCheckCircle, FaStream, FaQuestionCircle } from 'react-icons/fa';
+import { X, Target, CheckCircle, List, HelpCircle } from 'lucide-react';
 
 interface QuestLogProps {
   plan: ChapterPlan;
@@ -22,7 +22,7 @@ const QuestLog: React.FC<QuestLogProps> = ({ plan, onClose }) => {
           className="absolute top-3 right-3 text-gray-400 hover:text-white transition-colors z-10"
           aria-label="임무 일지 닫기"
         >
-          <FaTimes className="h-6 w-6" />
+          <X className="h-6 w-6" />
         </button>
 
         <h1 className="text-3xl font-bold text-yellow-300 font-adventure tracking-wider text-center mb-2">
@@ -31,7 +31,7 @@ const QuestLog: React.FC<QuestLogProps> = ({ plan, onClose }) => {
         
         <div className="text-center text-gray-400 mb-6 border-b border-gray-700 pb-4">
           <h2 className="text-lg font-semibold flex items-center justify-center gap-2">
-            <FaBullseye />
+            <Target size={20} />
             최종 목표
           </h2>
           <p>{plan.overallGoal}</p>
@@ -39,7 +39,7 @@ const QuestLog: React.FC<QuestLogProps> = ({ plan, onClose }) => {
 
         <div className="flex-grow overflow-y-auto pr-2 space-y-4">
           <h3 className="text-md font-semibold text-gray-300 flex items-center gap-2">
-             <FaStream />
+             <List size={20} />
              진행 단계
           </h3>
           <ul className="space-y-3">
@@ -52,7 +52,7 @@ const QuestLog: React.FC<QuestLogProps> = ({ plan, onClose }) => {
                 return (
                   <li key={index} className="p-3 rounded-lg bg-gray-800/50 border border-gray-700/50 opacity-50">
                     <div className="flex items-center gap-3">
-                      <FaQuestionCircle className="text-gray-500 w-5 h-5" />
+                      <HelpCircle className="text-gray-500 w-5 h-5" />
                       <span className="text-gray-500 italic">아직 밝혀지지 않은 여정...</span>
                     </div>
                   </li>
@@ -64,7 +64,7 @@ const QuestLog: React.FC<QuestLogProps> = ({ plan, onClose }) => {
                   <div className="flex items-start gap-3">
                     <div className="mt-1">
                       {isCompleted ? (
-                        <FaCheckCircle className="text-green-400 w-5 h-5" />
+                        <CheckCircle className="text-green-400 w-5 h-5" />
                       ) : (
                         <div className={`w-5 h-5 rounded-full border-2 ${isCurrent ? 'border-cyan-400 animate-pulse' : 'border-gray-500'}`} />
                       )}

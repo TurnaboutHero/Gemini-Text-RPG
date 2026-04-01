@@ -10,16 +10,20 @@ export const processStateChanges = (
   const systemMessages: SystemMessagePart[] = [];
 
   if (response.goldChange) {
-    updatedCharacter.gold += response.goldChange;
-    const changeText = response.goldChange > 0 ? `획득: +${response.goldChange} G` : `소비: ${response.goldChange} G`;
+    // Limit gold change to reasonable bounds to prevent AI hallucinations
+    const boundedGoldChange = Math.max(-1000, Math.min(1000, response.goldChange));
+    updatedCharacter.gold += boundedGoldChange;
+    const changeText = boundedGoldChange > 0 ? `획득: +${boundedGoldChange} G` : `소비: ${boundedGoldChange} G`;
     systemMessages.push({ id: crypto.randomUUID(), type: StoryPartType.SYSTEM_MESSAGE, text: `골드 변경: ${changeText}` });
   }
 
   if (response.hpChange) {
+    // Limit HP change to reasonable bounds
+    const boundedHpChange = Math.max(-updatedCharacter.maxHp, Math.min(updatedCharacter.maxHp, response.hpChange));
     const oldHp = updatedCharacter.hp;
-    const newHp = Math.max(0, Math.min(updatedCharacter.maxHp, oldHp + response.hpChange));
+    const newHp = Math.max(0, Math.min(updatedCharacter.maxHp, oldHp + boundedHpChange));
     updatedCharacter.hp = newHp;
-    const changeText = response.hpChange > 0 ? `${response.hpChange} HP 회복` : `${Math.abs(response.hpChange)} 피해`;
+    const changeText = boundedHpChange > 0 ? `${boundedHpChange} HP 회복` : `${Math.abs(boundedHpChange)} 피해`;
     systemMessages.push({ id: crypto.randomUUID(), type: StoryPartType.SYSTEM_MESSAGE, text: `체력 변경: ${changeText}` });
   }
 
@@ -34,13 +38,16 @@ export const processStateChanges = (
   }
   
   if (response.itemsGained && response.itemsGained.length > 0) {
-      const newItems: Item[] = response.itemsGained.map(itemData => ({
-        ...itemData,
-        id: crypto.randomUUID(),
-      }));
-      updatedCharacter.inventory = [...updatedCharacter.inventory, ...newItems];
-      const itemNames = newItems.map(i => i.name).join(', ');
-      systemMessages.push({ id: crypto.randomUUID(), type: StoryPartType.SYSTEM_MESSAGE, text: `아이템 획득: ${itemNames}` });
+      const validItems = response.itemsGained.filter(item => item.name && item.itemType && item.slot);
+      if (validItems.length > 0) {
+          const newItems: Item[] = validItems.map(itemData => ({
+            ...itemData,
+            id: crypto.randomUUID(),
+          }));
+          updatedCharacter.inventory = [...updatedCharacter.inventory, ...newItems];
+          const itemNames = newItems.map(i => i.name).join(', ');
+          systemMessages.push({ id: crypto.randomUUID(), type: StoryPartType.SYSTEM_MESSAGE, text: `아이템 획득: ${itemNames}` });
+      }
   }
   
   if (response.itemsLost && response.itemsLost.length > 0) {

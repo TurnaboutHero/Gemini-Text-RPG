@@ -1,16 +1,18 @@
 @import "tailwindcss";
 
 @theme {
-  /* Design Tokens - Adventure Theme */
-  --color-primary: #D4AF37;    /* Gold: Value, Reward, Magic */
-  --color-secondary: #8B0000;  /* Crimson: Combat, Danger, Intensity */
-  --color-accent: #0EA5E9;     /* Sky: Arcane, Mana, Clarity */
+  /* Design Tokens - Arcane/Chronicle Theme */
+  --color-primary: #D4AF37;    /* Gold */
+  --color-secondary: #8B0000;  /* Crimson */
+  --color-accent: #0EA5E9;     /* Sky Arcane */
   
-  --color-bg-deep: #0F172A;    /* Deep Slate: Main Background */
-  --color-bg-card: #1E293B;    /* Slate: UI Panels */
+  --color-bg-deep: #05070A;    /* Deep Obsidian */
+  --color-bg-card: #0F172A;    /* Midnight Slate */
   
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-adventure: "IM Fell English", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-adventure: "Cormorant Garamond", serif;
+  --font-serif: "Libre Baskerville", serif;
 
   /* Custom Animations */
   @keyframes fade-in {
@@ -24,19 +26,65 @@
   }
 
   @keyframes pulse-glow {
-    0%, 100% { box-shadow: 0 0 5px rgba(56, 189, 248, 0.3); transform: scale(1); }
-    50% { box-shadow: 0 0 15px rgba(56, 189, 248, 0.6); transform: scale(1.05); }
+    0%, 100% { box-shadow: 0 0 5px rgba(212, 175, 55, 0.1); transform: scale(1); }
+    50% { box-shadow: 0 0 20px rgba(212, 175, 55, 0.3); transform: scale(1.01); }
   }
 
-  --animate-fade-in: fade-in 0.5s ease-out forwards;
+  @keyframes scanline {
+    0% { transform: translateY(-100%); }
+    100% { transform: translateY(100%); }
+  }
+
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+    20%, 40%, 60%, 80% { transform: translateX(5px); }
+  }
+
+  @keyframes atmosphere-drift {
+    0% { background-position: 0% 0%; }
+    50% { background-position: 100% 100%; }
+    100% { background-position: 0% 0%; }
+  }
+
+  --animate-fade-in: fade-in 0.3s ease-out forwards;
   --animate-float-up: float-up 1.5s ease-out forwards;
-  --animate-pulse-glow: pulse-glow 2.5s infinite ease-in-out;
+  --animate-pulse-glow: pulse-glow 3s infinite ease-in-out;
+  --animate-shake: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
 }
 
 /* Global Styles */
 @layer base {
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500;1,600;1,700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap');
+
   body {
-    @apply bg-bg-deep text-gray-200 font-sans antialiased;
+    @apply bg-bg-deep text-gray-300 font-sans antialiased relative min-h-screen;
+    background: 
+      radial-gradient(circle at 50% 30%, rgba(212, 175, 55, 0.05) 0%, transparent 60%),
+      radial-gradient(circle at 10% 80%, rgba(14, 165, 233, 0.05) 0%, transparent 50%),
+      var(--color-bg-deep);
+    background-size: 200% 200%;
+    animation: atmosphere-drift 20s ease infinite;
+  }
+
+  body::after {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+      to bottom,
+      transparent 0%,
+      rgba(255, 255, 255, 0.01) 50%,
+      transparent 100%
+    );
+    background-size: 100% 4px;
+    pointer-events: none;
+    z-index: 50;
+    opacity: 0.3;
+    animation: scanline 15s linear infinite;
   }
   
   h1, h2, h3, .font-adventure {
@@ -45,23 +93,55 @@
 
   /* Custom Scrollbar */
   ::-webkit-scrollbar {
-    width: 6px;
+    width: 4px;
   }
   ::-webkit-scrollbar-track {
-    @apply bg-bg-deep;
+    @apply bg-transparent;
   }
   ::-webkit-scrollbar-thumb {
-    @apply bg-gray-700 rounded-full hover:bg-gray-600 transition-colors;
+    @apply bg-primary/20 rounded-full hover:bg-primary/40 transition-colors;
   }
 }
 
 /* Utility Classes */
 @layer utilities {
   .glass-panel {
-    @apply bg-bg-card/80 backdrop-blur-md border border-white/10 shadow-xl;
+    @apply bg-bg-card/40 backdrop-blur-xl border border-white/10 shadow-2xl;
+  }
+  
+  .text-glow {
+    text-shadow: 0 0 12px rgba(212, 175, 55, 0.4);
   }
   
   .text-shadow-adventure {
-    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+    text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8);
   }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .mask-fade-bottom {
+    mask-image: linear-gradient(to bottom, black 80%, transparent 100%);
+  }
+
+  .mask-fade-top {
+    mask-image: linear-gradient(to top, black 80%, transparent 100%);
+  }
+}
+
+.markdown-body p {
+  @apply mb-4 last:mb-0;
+}
+
+.markdown-body em {
+  @apply text-primary/80 italic;
+}
+
+.markdown-body strong {
+  @apply text-primary font-bold;
 }

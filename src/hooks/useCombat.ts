@@ -44,9 +44,23 @@ export const useCombat = (
             if (enemyIndex !== -1) {
               const enemy = { ...newCombatState.enemies[enemyIndex] };
               enemy.hp = Math.max(0, enemy.hp - damage.amount);
+              enemy.isShaking = true;
               addUiEffect(`${damage.amount}`, 'text-red-500', enemy.id);
               audioService.playSfx('combat_hit_enemy');
               newCombatState.enemies[enemyIndex] = enemy;
+              
+              setTimeout(() => {
+                  setGameState(current => {
+                      if (!current.combatState) return current;
+                      const updatedEnemies = [...current.combatState.enemies];
+                      const idx = updatedEnemies.findIndex(e => e.id === enemy.id);
+                      if (idx !== -1) {
+                          updatedEnemies[idx] = { ...updatedEnemies[idx], isShaking: false };
+                      }
+                      return { ...current, combatState: { ...current.combatState, enemies: updatedEnemies } };
+                  });
+              }, 500);
+
               if (enemy.hp === 0) {
                  newCombatState.combatLog.push(`${enemy.name}(을)를 쓰러트렸다!`);
               }
@@ -55,12 +69,52 @@ export const useCombat = (
         }
         
         if (result.playerHpChange) {
-            const change = result.playerHpChange;
+            const change = Math.max(-newCharacter.maxHp, Math.min(newCharacter.maxHp, result.playerHpChange));
             newCharacter.hp = Math.max(0, Math.min(newCharacter.maxHp, newCharacter.hp + change));
             addUiEffect(`${change > 0 ? '+' : ''}${change}`, change > 0 ? 'text-green-400' : 'text-yellow-400', 'player-portrait');
         }
         if (result.playerMpChange) {
-            newCharacter.mp = Math.max(0, newCharacter.mp + result.playerMpChange);
+            const change = Math.max(-newCharacter.maxMp, Math.min(newCharacter.maxMp, result.playerMpChange));
+            newCharacter.mp = Math.max(0, Math.min(newCharacter.maxMp, newCharacter.mp + change));
+        }
+
+        if (result.statusEffectApplied) {
+            const { target, name } = result.statusEffectApplied;
+            if (target === 'player') {
+                if (!newCharacter.statusEffects.includes(name)) {
+                    newCharacter.statusEffects.push(name);
+                    addUiEffect(name, 'text-purple-400', 'player-portrait');
+                }
+            } else {
+                const enemyIndex = newCombatState.enemies.findIndex(e => e.id === target);
+                if (enemyIndex !== -1) {
+                    const enemy = { ...newCombatState.enemies[enemyIndex] };
+                    if (!enemy.statusEffects) enemy.statusEffects = [];
+                    if (!enemy.statusEffects.includes(name)) {
+                        enemy.statusEffects.push(name);
+                        addUiEffect(name, 'text-purple-400', enemy.id);
+                    }
+                    newCombatState.enemies[enemyIndex] = enemy;
+                }
+            }
+        }
+
+        if (result.statusEffectRemoved) {
+            const { target, name } = result.statusEffectRemoved;
+            if (target === 'player') {
+                newCharacter.statusEffects = newCharacter.statusEffects.filter(e => e !== name);
+                addUiEffect(`-${name}`, 'text-gray-400', 'player-portrait');
+            } else {
+                const enemyIndex = newCombatState.enemies.findIndex(e => e.id === target);
+                if (enemyIndex !== -1) {
+                    const enemy = { ...newCombatState.enemies[enemyIndex] };
+                    if (enemy.statusEffects) {
+                        enemy.statusEffects = enemy.statusEffects.filter(e => e !== name);
+                        addUiEffect(`-${name}`, 'text-gray-400', enemy.id);
+                    }
+                    newCombatState.enemies[enemyIndex] = enemy;
+                }
+            }
         }
 
         if (result.skillUsed) {
@@ -152,7 +206,9 @@ export const useCombat = (
                      hitPlayer = true;
                 });
                 
-                if (hitPlayer) audioService.playSfx('combat_hit_player');
+                if (hitPlayer) {
+                    audioService.playSfx('combat_hit_player');
+                }
 
                 newCombatState.combatLog = newCombatLog;
                 newCombatState.turn = 'player';
@@ -162,8 +218,13 @@ export const useCombat = (
                     }
                 }
                 
-                return { ...prev, character: newCharacter, combatState: newCombatState };
+                return { ...prev, character: newCharacter, combatState: newCombatState, isShaking: hitPlayer };
             });
+
+            // Reset shake after a short delay
+            setTimeout(() => {
+                setGameState(prev => ({ ...prev, isShaking: false }));
+            }, 500);
         }, 1500);
 
         return () => clearTimeout(enemyTurnTimeout);

@@ -1,5 +1,20 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Character, Ability, Item, ItemSlot, ImageModel } from '../types';
+import { motion, AnimatePresence } from 'motion/react';
+import { 
+  User, 
+  Shield, 
+  Scroll, 
+  BarChart3, 
+  CheckCircle2, 
+  ChevronRight, 
+  ChevronLeft, 
+  Sparkles, 
+  Upload, 
+  RefreshCw, 
+  Trash2,
+  Info
+} from 'lucide-react';
+import { Character, Ability, Item, ImageModel } from '../types';
 import { RACES, CLASSES, BACKGROUNDS, ABILITIES, STANDARD_ARRAY } from '../dndData';
 import { generateCharacterImage } from '../services/geminiService';
 import LoadingSpinner from './LoadingSpinner';
@@ -130,7 +145,13 @@ const CharacterCreator: React.FC<CharacterCreatorProps> = ({ onCharacterCreate, 
         const imageUrl = await generateCharacterImage(prompt, character.name, referenceImageUrl, imageModel);
         setCharacterImageUrl(imageUrl);
     } catch (err) {
-        setImageError(err instanceof Error ? err.message : "알 수 없는 오류로 이미지 생성에 실패했습니다.");
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        if (errorMessage.includes('PERMISSION_DENIED') || errorMessage.includes('403')) {
+            setImageError("API 키 권한이 없거나 유효하지 않습니다. 유료 프로젝트의 API 키를 다시 선택해 주세요.");
+            await window.aistudio.openSelectKey();
+        } else {
+            setImageError(errorMessage);
+        }
     } finally {
         setIsGeneratingImage(false);
     }
@@ -215,32 +236,98 @@ const CharacterCreator: React.FC<CharacterCreatorProps> = ({ onCharacterCreate, 
   };
   
   const renderSelectionStep = (title: string, options: { name: string, description: string }[], selectedValue: string, onSelect: (value: string) => void) => (
-    <div>
-      <h2 className="text-2xl font-bold text-cyan-300 font-adventure tracking-wider text-center mb-6">{title} 선택</h2>
-      <div className="space-y-3">
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      className="w-full max-w-2xl mx-auto"
+    >
+      <div className="text-center mb-8">
+        <h2 className="text-2xl font-bold text-primary font-adventure tracking-[0.2em] uppercase text-glow mb-2">{title} 선택</h2>
+        <p className="text-[10px] text-gray-500 font-mono tracking-widest uppercase">당신의 운명을 결정할 첫 걸음을 내딛으십시오.</p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {options.map(opt => (
-          <div
+          <motion.div
             key={opt.name}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
             onClick={() => onSelect(opt.name)}
-            className={`p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ${selectedValue === opt.name ? 'border-cyan-500 bg-cyan-900/50' : 'border-gray-700 hover:border-gray-600 bg-gray-800'}`}
+            className={`p-4 border rounded-xl cursor-pointer transition-all duration-300 group relative overflow-hidden ${
+              selectedValue === opt.name 
+                ? 'border-primary bg-primary/10 shadow-[0_0_20px_rgba(212,175,55,0.15)]' 
+                : 'border-white/5 bg-bg-card/40 hover:border-white/20 hover:bg-white/5'
+            }`}
           >
-            <h3 className="font-bold text-lg text-gray-100">{opt.name}</h3>
-            <p className="text-sm text-gray-400">{opt.description}</p>
-          </div>
+            <div className={`absolute top-0 left-0 w-1 h-full transition-colors ${
+              selectedValue === opt.name ? 'bg-primary' : 'bg-transparent group-hover:bg-white/10'
+            }`} />
+            
+            <div className="flex justify-between items-start mb-2">
+              <h3 className={`font-bold text-lg font-adventure tracking-wide transition-colors ${
+                selectedValue === opt.name ? 'text-primary' : 'text-gray-200'
+              }`}>
+                {opt.name}
+              </h3>
+              {selectedValue === opt.name && (
+                <Sparkles className="w-4 h-4 text-primary animate-pulse" />
+              )}
+            </div>
+            
+            <p className="text-[11px] text-gray-500 leading-relaxed font-serif italic line-clamp-2 group-hover:line-clamp-none transition-all">
+              {opt.description}
+            </p>
+
+            {selectedValue === opt.name && (
+              <motion.div 
+                layoutId="active-glow"
+                className="absolute inset-0 bg-primary/5 pointer-events-none"
+              />
+            )}
+          </motion.div>
         ))}
       </div>
-    </div>
+    </motion.div>
   );
 
   const renderAbilityScoreStep = () => (
-    <div>
-      <h2 className="text-2xl font-bold text-cyan-300 font-adventure tracking-wider text-center mb-2">능력치 분배</h2>
-      <p className="text-center text-gray-400 mb-4">사용 가능한 점수 배열: [15, 14, 13, 12, 10, 8] 를 6가지 능력치에 할당하세요.</p>
+    <motion.div 
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      className="w-full max-w-3xl mx-auto"
+    >
+      <div className="text-center mb-8">
+        <h2 className="text-2xl font-bold text-primary font-adventure tracking-[0.2em] uppercase text-glow mb-2">능력치 할당</h2>
+        <p className="text-[10px] text-gray-500 font-mono tracking-widest uppercase">당신의 타고난 재능을 분배하십시오. [15, 14, 13, 12, 10, 8]</p>
+      </div>
       
-      <div className="flex flex-wrap justify-center gap-2 mb-6">
-        <button type="button" onClick={handleRecommendedAllocation} className="bg-cyan-700 text-white font-bold rounded-lg py-2 px-4 text-sm hover:bg-cyan-600 transition-colors">직업 추천 배분</button>
-        <button type="button" onClick={handleRandomAllocation} className="bg-gray-600 text-white font-bold rounded-lg py-2 px-4 text-sm hover:bg-gray-500 transition-colors">무작위 배분</button>
-        <button type="button" onClick={handleResetScores} className="bg-red-800 text-white font-bold rounded-lg py-2 px-4 text-sm hover:bg-red-700 transition-colors">초기화</button>
+      <div className="flex flex-wrap justify-center gap-3 mb-8">
+        <button 
+          type="button" 
+          onClick={handleRecommendedAllocation} 
+          className="flex items-center gap-2 bg-primary/10 border border-primary/30 text-primary font-adventure tracking-widest rounded-full py-2 px-6 text-[10px] hover:bg-primary/20 transition-all uppercase group"
+        >
+          <Sparkles className="w-3 h-3 group-hover:rotate-12 transition-transform" />
+          추천 할당
+        </button>
+        <button 
+          type="button" 
+          onClick={handleRandomAllocation} 
+          className="flex items-center gap-2 bg-white/5 border border-white/10 text-gray-400 font-adventure tracking-widest rounded-full py-2 px-6 text-[10px] hover:bg-white/10 transition-all uppercase group"
+        >
+          <RefreshCw className="w-3 h-3 group-hover:rotate-180 transition-transform duration-500" />
+          무작위
+        </button>
+        <button 
+          type="button" 
+          onClick={handleResetScores} 
+          className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 text-red-400 font-adventure tracking-widest rounded-full py-2 px-6 text-[10px] hover:bg-red-500/20 transition-all uppercase group"
+        >
+          <Trash2 className="w-3 h-3 group-hover:scale-110 transition-transform" />
+          초기화
+        </button>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -248,180 +335,288 @@ const CharacterCreator: React.FC<CharacterCreatorProps> = ({ onCharacterCreate, 
           const base = baseScores[ability];
           const bonus = (racialBonuses as Record<string, number>)[ability] || 0;
           const total = finalScores[ability];
+          const modifier = Math.floor((total - 10) / 2);
+          
           return (
-            <div key={ability} className="p-3 bg-gray-700/50 rounded-lg flex flex-col">
-              <label className="text-md font-bold text-gray-300">{ability}</label>
-              <div className="flex items-center gap-2 mt-2 flex-grow">
+            <motion.div 
+              key={ability}
+              whileHover={{ y: -2 }}
+              className="p-4 bg-bg-card/40 border border-white/5 rounded-2xl flex flex-col group hover:border-primary/30 transition-all relative"
+            >
+              <div className="flex justify-between items-center mb-4">
+                <label className="text-[10px] font-mono uppercase tracking-widest text-gray-500">{ability}</label>
+                <div className={`text-xs font-bold font-mono ${modifier >= 0 ? 'text-primary' : 'text-red-400'}`}>
+                  {modifier >= 0 ? `+${modifier}` : modifier}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 mt-auto">
                 <select
                   value={base}
                   onChange={(e) => handleAbilityChange(ability, e.target.value)}
-                  className="w-full bg-gray-800 border-2 border-gray-700 rounded-lg py-1 px-2 text-gray-200 focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500"
+                  className="flex-1 bg-bg-deep border border-white/10 rounded-xl py-2 px-3 text-gray-200 font-mono text-sm focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50 appearance-none cursor-pointer"
                 >
                   <option value={0}>-</option>
                   {base > 0 && <option value={base}>{base}</option>}
                   {availableScores.map(score => <option key={score} value={score}>{score}</option>)}
                 </select>
-                <span className="text-cyan-400 font-bold text-2xl">= {total}</span>
+                <div className="relative">
+                  <span className="text-primary font-adventure text-3xl text-glow leading-none">{total}</span>
+                  {bonus > 0 && (
+                    <span className="absolute -top-2 -right-4 text-[8px] text-green-500 font-bold">+{bonus}</span>
+                  )}
+                </div>
               </div>
-              {bonus > 0 && <p className="text-xs text-green-400 mt-1 text-right">기본 {base} + 종족 {bonus}</p>}
-            </div>
+              
+              <div className="mt-3 h-1 bg-white/5 rounded-full overflow-hidden">
+                <motion.div 
+                  initial={{ width: 0 }}
+                  animate={{ width: `${(total / 20) * 100}%` }}
+                  className="h-full bg-primary/40"
+                />
+              </div>
+            </motion.div>
           );
         })}
       </div>
-    </div>
+    </motion.div>
   );
 
   const renderReviewStep = () => (
-    <div>
-        <h2 className="text-2xl font-bold text-cyan-300 font-adventure tracking-wider text-center mb-6">캐릭터 완성</h2>
-        <div className="flex flex-col md:flex-row gap-6">
-            <div className="md:w-1/3 flex flex-col items-center">
-                <div className="w-full flex items-center justify-between mb-4 bg-gray-800 p-3 rounded-lg border border-gray-700">
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-300">AI 일러스트 생성</h3>
-                    <p className="text-xs text-gray-500 mt-1">API 호출량 절약을 위해 끌 수 있습니다.</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" checked={useImageGeneration} onChange={() => setUseImageGeneration(!useImageGeneration)} />
-                    <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-cyan-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
-                  </label>
-                </div>
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      className="w-full max-w-4xl mx-auto"
+    >
+      <div className="text-center mb-10">
+        <h2 className="text-2xl font-bold text-primary font-adventure tracking-[0.2em] uppercase text-glow mb-2">모험의 서막</h2>
+        <p className="text-[10px] text-gray-500 font-mono tracking-widest uppercase">당신의 전설이 이곳에서 시작됩니다.</p>
+      </div>
 
-                {useImageGeneration && (
-                  <div className="w-full mb-4 bg-gray-800 p-3 rounded-lg border border-gray-700">
-                    <h3 className="text-sm font-medium text-gray-300 mb-2">이미지 모델 선택</h3>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {/* Left Column: Portrait & Image Controls */}
+        <div className="lg:col-span-4 space-y-6">
+          <div className="relative group">
+            <div className="aspect-[3/4] bg-bg-deep rounded-2xl overflow-hidden border border-white/10 shadow-2xl relative">
+              {isGeneratingImage ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-bg-deep/80 backdrop-blur-sm z-20">
+                  <LoadingSpinner />
+                  <p className="mt-4 text-[10px] text-primary font-adventure tracking-widest animate-pulse">초상화 그리는 중...</p>
+                </div>
+              ) : characterImageUrl ? (
+                <motion.img 
+                  initial={{ scale: 1.1, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  src={characterImageUrl} 
+                  alt="Character Portrait" 
+                  className="w-full h-full object-cover" 
+                />
+              ) : (
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-700">
+                  <User className="w-16 h-16 mb-2 opacity-20" />
+                  <span className="text-[10px] uppercase tracking-[0.3em] font-bold">No Portrait</span>
+                </div>
+              )}
+              
+              {/* Decorative Frame */}
+              <div className="absolute inset-0 border-[12px] border-bg-deep/40 pointer-events-none" />
+              <div className="absolute inset-0 border border-primary/20 pointer-events-none" />
+              <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-primary/40 rounded-tl-lg" />
+              <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-primary/40 rounded-tr-lg" />
+              <div className="absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 border-primary/40 rounded-bl-lg" />
+              <div className="absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-primary/40 rounded-br-lg" />
+            </div>
+          </div>
+
+          <div className="glass-panel p-4 rounded-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-primary" />
+                <span className="text-[10px] font-mono uppercase tracking-widest text-gray-400">AI Portrait</span>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" className="sr-only peer" checked={useImageGeneration} onChange={() => setUseImageGeneration(!useImageGeneration)} />
+                <div className="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+              </label>
+            </div>
+
+            <AnimatePresence>
+              {useImageGeneration && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="space-y-4 overflow-hidden"
+                >
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-mono uppercase tracking-widest text-gray-500 flex items-center gap-1">
+                      <Info className="w-3 h-3" /> 모델 선택
+                    </label>
                     <select 
                       value={imageModel} 
                       onChange={(e) => setImageModel(e.target.value as ImageModel)}
-                      className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-3 text-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                      className="w-full bg-bg-deep border border-white/10 rounded-xl py-2 px-3 text-gray-200 text-[10px] focus:outline-none focus:ring-1 focus:ring-primary/50"
                     >
-                      <optgroup label="기본 모델 (무료)">
-                        <option value="gemini-2.5-flash-image">나노 바나나 (Gemini 2.5 Flash Image)</option>
+                      <optgroup label="Standard (Free)">
+                        <option value="gemini-2.5-flash-image">Gemini 2.5 Flash</option>
                         <option value="imagen-4.0-generate-001">Imagen 4.0</option>
                       </optgroup>
-                      <optgroup label="프리미엄 모델 (API 키 필요)">
-                        <option value="gemini-3-pro-image-preview">나노 바나나 Pro (Gemini 3.0 Pro)</option>
-                        <option value="gemini-3.1-flash-image-preview">나노 바나나 2 (Gemini 3.1 Flash)</option>
+                      <optgroup label="Premium (API Key)">
+                        <option value="gemini-3-pro-image-preview">Gemini 3.0 Pro</option>
+                        <option value="gemini-3.1-flash-image-preview">Gemini 3.1 Flash</option>
                       </optgroup>
                     </select>
-                    {(imageModel === 'gemini-3-pro-image-preview' || imageModel === 'gemini-3.1-flash-image-preview') && (
-                      <p className="text-[10px] text-yellow-400 mt-1">※ 프리미엄 모델은 개인 API 키 설정이 필요합니다.</p>
-                    )}
                   </div>
-                )}
 
-                {useImageGeneration && (
-                  <>
-                    <h3 className="text-lg font-semibold text-gray-300 mb-2">생성된 초상화</h3>
-                    <div className="w-48 h-48 bg-gray-700 rounded-lg flex items-center justify-center mb-4 overflow-hidden">
-                        {isGeneratingImage ? (
-                            <LoadingSpinner />
-                        ) : characterImageUrl ? (
-                            <img src={characterImageUrl} alt="Character Portrait" className="w-full h-full object-cover" />
-                        ) : (
-                            <span className="text-gray-400 text-sm text-center">초상화를 생성하세요</span>
-                        )}
-                    </div>
-
-                    <h3 className="text-lg font-semibold text-gray-300 mb-2">참고 이미지 (선택)</h3>
-                    <div className="w-48 h-48 bg-gray-700 rounded-lg flex items-center justify-center mb-2 overflow-hidden border-2 border-dashed border-gray-500">
-                        {referenceImageUrl ? (
-                            <img src={referenceImageUrl} alt="Reference Preview" className="w-full h-full object-cover" />
-                        ) : (
-                            <span className="text-gray-400 text-sm text-center p-2">캐릭터, 의상, 무기 등 참고 이미지를 첨부하세요.</span>
-                        )}
-                    </div>
-                     <input
-                        id="image-upload"
-                        type="file"
-                        accept="image/png, image/jpeg, image/webp"
-                        onChange={handleImageUpload}
-                        className="hidden"
-                    />
-                    <label htmlFor="image-upload" className="bg-gray-600 text-white font-bold rounded-lg py-2 px-4 w-full hover:bg-gray-500 transition-colors cursor-pointer text-center text-sm mb-4">
-                        이미지 업로드
+                  <div className="grid grid-cols-2 gap-2">
+                    <input id="image-upload" type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                    <label htmlFor="image-upload" className="flex items-center justify-center gap-2 bg-white/5 border border-white/10 text-gray-400 font-adventure tracking-widest rounded-xl py-2 hover:bg-white/10 hover:text-white transition-all cursor-pointer text-[9px] uppercase">
+                      <Upload className="w-3 h-3" /> 참조 업로드
                     </label>
-                    
                     <button 
-                        type="button" 
-                        onClick={handleGenerateImage}
-                        disabled={isGeneratingImage || character.name.trim() === ''}
-                        className="bg-purple-600 text-white font-bold rounded-lg py-2 px-4 w-full hover:bg-purple-500 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed">
-                        {isGeneratingImage ? "생성 중..." : "캐릭터 초상화 생성"}
+                      type="button" 
+                      onClick={handleGenerateImage}
+                      disabled={isGeneratingImage || character.name.trim() === ''}
+                      className="flex items-center justify-center gap-2 bg-primary/10 border border-primary/30 text-primary font-adventure tracking-widest rounded-xl py-2 hover:bg-primary/20 transition-all disabled:opacity-30 disabled:cursor-not-allowed uppercase text-[9px]"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isGeneratingImage ? 'animate-spin' : ''}`} />
+                      생성하기
                     </button>
-                    {imageError && <p className="text-red-400 text-xs mt-2">{imageError}</p>}
-                     <p className="text-xs text-gray-500 mt-2">이름을 입력해야 생성이 가능합니다.</p>
-                  </>
-                )}
-                {!useImageGeneration && (
-                  <div className="w-48 h-48 bg-gray-800 rounded-lg flex flex-col items-center justify-center border border-gray-700 mt-4">
-                    <svg className="w-12 h-12 text-gray-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                    <span className="text-gray-500 text-sm text-center">이미지 생성 건너뜀</span>
                   </div>
-                )}
-            </div>
-            <div className="md:w-2/3 space-y-4">
-                <div>
-                    <label htmlFor="name" className="font-bold text-cyan-300 font-adventure tracking-wider">이름</label>
-                    <input
-                    id="name"
-                    type="text"
-                    value={character.name}
-                    onChange={(e) => setCharacter(p => ({ ...p, name: e.target.value }))}
-                    placeholder="당신의 캐릭터 이름은?"
-                    className="mt-1 w-full bg-gray-800 border-2 border-gray-700 rounded-lg py-2 px-3 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
-                    />
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-center md:text-left">
-                    <div><span className="font-bold text-gray-400">종족:</span> <span className="text-white">{character.race}</span></div>
-                    <div><span className="font-bold text-gray-400">클래스:</span> <span className="text-white">{character.class}</span></div>
-                    <div><span className="font-bold text-gray-400">배경:</span> <span className="text-white">{character.background}</span></div>
-                </div>
-                
-                <div>
-                  <h3 className="font-bold text-gray-400 mb-1">최종 능력치</h3>
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                    {ABILITIES.map(ability => (
-                      <div key={ability} className="bg-gray-800/50 p-1 rounded">
-                        <div className="text-xs text-gray-400">{ability}</div>
-                        <div className="text-lg font-bold text-white">{finalScores[ability]}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="font-bold text-gray-400 mb-1">시작 장비</h3>
-                  <div className="bg-gray-800/50 p-2 rounded-lg text-xs">
-                      <ul className="list-disc list-inside text-gray-300 grid grid-cols-2 gap-x-2">
-                          {startingInventory.map((item, index) => <li key={index}>{item.name}</li>)}
-                      </ul>
-                  </div>
-                </div>
-            </div>
+                  {imageError && <p className="text-red-400 text-[8px] text-center font-mono">{imageError}</p>}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
-    </div>
+
+        {/* Right Column: Character Details */}
+        <div className="lg:col-span-8 space-y-6">
+          <div className="space-y-2">
+            <label className="text-[10px] font-mono uppercase tracking-widest text-gray-500 ml-1">영웅의 이름</label>
+            <input
+              type="text"
+              value={character.name}
+              onChange={(e) => setCharacter(p => ({ ...p, name: e.target.value }))}
+              placeholder="이름을 입력하십시오..."
+              className="w-full bg-bg-card/60 border border-white/10 rounded-2xl py-4 px-6 text-2xl text-white placeholder-gray-800 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all font-adventure tracking-widest text-glow"
+            />
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            {[
+              { label: '종족', value: character.race, icon: User },
+              { label: '클래스', value: character.class, icon: Shield },
+              { label: '배경', value: character.background, icon: Scroll },
+            ].map((item, i) => (
+              <div key={i} className="glass-panel p-4 rounded-2xl group hover:border-primary/30 transition-all">
+                <div className="flex items-center gap-2 mb-1">
+                  <item.icon className="w-3 h-3 text-gray-600 group-hover:text-primary transition-colors" />
+                  <span className="text-[9px] uppercase tracking-widest text-gray-600 font-mono">{item.label}</span>
+                </div>
+                <span className="text-lg font-adventure text-primary tracking-wide block">{item.value}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="space-y-3">
+            <h3 className="text-[10px] font-mono uppercase tracking-widest text-gray-500 ml-1">최종 능력치</h3>
+            <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+              {ABILITIES.map(ability => (
+                <div key={ability} className="bg-bg-deep/50 border border-white/5 p-3 rounded-2xl text-center group hover:border-primary/20 transition-all">
+                  <div className="text-[8px] text-gray-600 uppercase font-mono mb-1">{ability}</div>
+                  <div className="text-xl font-adventure text-gray-200 group-hover:text-primary transition-colors">{finalScores[ability]}</div>
+                  <div className="text-[9px] font-mono text-gray-600 mt-0.5">
+                    {Math.floor((finalScores[ability] - 10) / 2) >= 0 ? '+' : ''}{Math.floor((finalScores[ability] - 10) / 2)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <h3 className="text-[10px] font-mono uppercase tracking-widest text-gray-500 ml-1">시작 장비</h3>
+            <div className="glass-panel p-5 rounded-2xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -mr-16 -mt-16 blur-3xl" />
+              <ul className="grid grid-cols-2 gap-y-2 gap-x-4 relative z-10">
+                {startingInventory.map((item, index) => (
+                  <motion.li 
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    key={index} 
+                    className="text-xs text-gray-400 flex items-center gap-2 group/item"
+                  >
+                    <div className="w-1 h-1 bg-primary/40 rounded-full group-hover/item:scale-150 group-hover/item:bg-primary transition-all" />
+                    <span className="group-hover/item:text-gray-200 transition-colors">{item.name}</span>
+                  </motion.li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </motion.div>
   );
 
   const renderProgressBar = () => {
-    const steps = ['종족', '클래스', '배경', '능력치', '완성'];
+    const steps = [
+      { id: 1, label: 'Race', icon: User },
+      { id: 2, label: 'Class', icon: Shield },
+      { id: 3, label: 'Origin', icon: Scroll },
+      { id: 4, label: 'Stats', icon: BarChart3 },
+      { id: 5, label: 'Final', icon: CheckCircle2 },
+    ];
+
     return (
-        <div className="flex items-center justify-center space-x-2 md:space-x-4 mb-8">
-            {steps.map((label, index) => (
-                <React.Fragment key={label}>
-                    <div className="flex flex-col items-center">
-                        <div className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center transition-all duration-300 ${index + 1 <= step ? 'bg-cyan-600 text-white' : 'bg-gray-700 text-gray-400'}`}>
-                           {index + 1}
-                        </div>
-                        <span className={`mt-2 text-xs md:text-sm font-semibold ${index + 1 <= step ? 'text-cyan-300' : 'text-gray-500'}`}>{label}</span>
-                    </div>
-                    {index < steps.length - 1 && (
-                        <div className={`flex-1 h-1 rounded-full ${index + 1 < step ? 'bg-cyan-600' : 'bg-gray-700'}`}></div>
-                    )}
-                </React.Fragment>
-            ))}
-        </div>
+      <div className="flex items-center justify-between w-full max-w-2xl mx-auto mb-12 px-4">
+        {steps.map((s, index) => {
+          const Icon = s.icon;
+          const isActive = step === s.id;
+          const isCompleted = step > s.id;
+
+          return (
+            <React.Fragment key={s.id}>
+              <div className="flex flex-col items-center relative z-10">
+                <motion.div
+                  initial={false}
+                  animate={{
+                    scale: isActive ? 1.1 : 1,
+                    borderColor: isActive || isCompleted ? 'var(--color-primary)' : 'rgba(255,255,255,0.1)',
+                    backgroundColor: isActive ? 'rgba(212, 175, 55, 0.1)' : 'rgba(212, 175, 55, 0)',
+                  }}
+                  className={`w-10 h-10 rounded-full border-2 flex items-center justify-center transition-colors duration-500 ${
+                    isActive ? 'shadow-[0_0_15px_rgba(212,175,55,0.3)]' : ''
+                  }`}
+                >
+                  <Icon 
+                    className={`w-5 h-5 ${
+                      isActive || isCompleted ? 'text-primary' : 'text-gray-600'
+                    }`} 
+                  />
+                </motion.div>
+                <span 
+                  className={`mt-2 text-[9px] uppercase tracking-[0.2em] font-bold transition-colors duration-500 ${
+                    isActive ? 'text-primary' : 'text-gray-600'
+                  }`}
+                >
+                  {s.label}
+                </span>
+              </div>
+              {index < steps.length - 1 && (
+                <div className="flex-1 h-[1px] bg-white/5 mx-2 -mt-6">
+                  <motion.div
+                    initial={{ width: '0%' }}
+                    animate={{ width: isCompleted ? '100%' : '0%' }}
+                    className="h-full bg-primary/40 shadow-[0_0_8px_rgba(212,175,55,0.2)]"
+                  />
+                </div>
+              )}
+            </React.Fragment>
+          );
+        })}
+      </div>
     );
   };
 
@@ -437,52 +632,90 @@ const CharacterCreator: React.FC<CharacterCreatorProps> = ({ onCharacterCreate, 
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-3xl bg-gray-800/50 p-6 md:p-8 rounded-lg shadow-lg shadow-cyan-500/20">
-        <h1 className="text-3xl md:text-4xl font-bold text-white font-adventure tracking-wider text-center mb-4">캐릭터 생성</h1>
+    <div className="min-h-screen bg-bg-deep flex flex-col items-center py-12 px-4 relative">
+      {/* Background Effects */}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(212,175,55,0.05)_0%,transparent_50%)] pointer-events-none" />
+      <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10 pointer-events-none" />
+
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.98 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="w-full max-w-5xl glass-panel p-6 md:p-10 rounded-[2rem] relative z-10"
+      >
+        {/* Decorative Corners */}
+        <div className="absolute top-0 left-0 w-16 h-16 border-t-2 border-l-2 border-primary/20 rounded-tl-[2rem] pointer-events-none" />
+        <div className="absolute top-0 right-0 w-16 h-16 border-t-2 border-r-2 border-primary/20 rounded-tr-[2rem] pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-16 h-16 border-b-2 border-l-2 border-primary/20 rounded-bl-[2rem] pointer-events-none" />
+        <div className="absolute bottom-0 right-0 w-16 h-16 border-b-2 border-r-2 border-primary/20 rounded-br-[2rem] pointer-events-none" />
+
+        <div className="text-center mb-12">
+          <motion.h1 
+            initial={{ letterSpacing: '0.5em', opacity: 0 }}
+            animate={{ letterSpacing: '0.3em', opacity: 1 }}
+            className="text-3xl md:text-5xl font-bold text-white font-adventure uppercase text-glow"
+          >
+            영웅의 탄생
+          </motion.h1>
+          <div className="flex items-center justify-center gap-4 mt-4">
+            <div className="h-[1px] w-12 bg-gradient-to-r from-transparent to-primary/40" />
+            <Sparkles className="w-4 h-4 text-primary/60" />
+            <div className="h-[1px] w-12 bg-gradient-to-l from-transparent to-primary/40" />
+          </div>
+        </div>
+
         {renderProgressBar()}
         
-        <form onSubmit={handleSubmit}>
-            <div className="min-h-[420px] flex flex-col justify-center">
-                {renderStepContent()}
-            </div>
-            
-            <div className="flex justify-between items-center mt-8 relative">
-                {error && (
-                    <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 w-full max-w-md bg-red-900/80 text-red-100 text-sm p-2 rounded-lg border border-red-700 text-center shadow-lg animate-pulse">
-                        {error}
-                    </div>
-                )}
-                <button
-                    type="button"
-                    onClick={prevStep}
-                    disabled={step === 1}
-                    className="bg-gray-600 text-white font-bold rounded-lg py-2 px-6 hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-gray-500 transition-all duration-300 disabled:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                    이전
-                </button>
+        <form onSubmit={handleSubmit} className="relative">
+          <div className="min-h-[450px] flex flex-col">
+            <AnimatePresence mode="wait">
+              {renderStepContent()}
+            </AnimatePresence>
+          </div>
+          
+          <div className="flex justify-between items-center mt-12 pt-8 border-t border-white/5">
+            <button
+              type="button"
+              onClick={prevStep}
+              disabled={step === 1}
+              className="flex items-center gap-2 bg-white/5 border border-white/10 text-gray-400 font-adventure tracking-widest rounded-xl py-3 px-8 text-xs hover:bg-white/10 hover:text-white transition-all disabled:opacity-10 disabled:cursor-not-allowed uppercase group"
+            >
+              <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+              이전
+            </button>
 
-                {step < totalSteps ? (
-                    <button
-                        type="button"
-                        onClick={nextStep}
-                        disabled={!isStepComplete}
-                        className="bg-cyan-600 text-white font-bold rounded-lg py-2 px-6 hover:bg-cyan-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-cyan-500 transition-all duration-300 disabled:bg-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                        다음
-                    </button>
-                ) : (
-                    <button
-                        type="submit"
-                        disabled={!isStepComplete}
-                        className="bg-green-600 text-white font-bold rounded-lg py-2 px-6 hover:bg-green-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-green-500 transition-all duration-300 disabled:bg-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                        모험 시작하기
-                    </button>
-                )}
-            </div>
+            {error && (
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="absolute -top-6 left-1/2 -translate-x-1/2 bg-red-500/10 border border-red-500/30 text-red-400 text-[9px] px-4 py-1 rounded-full font-mono uppercase tracking-widest"
+              >
+                {error}
+              </motion.div>
+            )}
+
+            {step < totalSteps ? (
+              <button
+                type="button"
+                onClick={nextStep}
+                disabled={!isStepComplete}
+                className="flex items-center gap-2 bg-primary/10 border border-primary/30 text-primary font-adventure tracking-widest rounded-xl py-3 px-8 text-xs hover:bg-primary/20 hover:border-primary/50 transition-all disabled:opacity-10 disabled:cursor-not-allowed uppercase group shadow-[0_0_20px_rgba(212,175,55,0.1)]"
+              >
+                다음
+                <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={!isStepComplete}
+                className="flex items-center gap-2 bg-accent/10 border border-accent/30 text-accent font-adventure tracking-widest rounded-xl py-3 px-10 text-xs hover:bg-accent/20 hover:border-accent/50 transition-all disabled:opacity-10 disabled:cursor-not-allowed uppercase group shadow-[0_0_20px_rgba(14,165,233,0.15)]"
+              >
+                여정 시작
+                <Sparkles className="w-4 h-4 group-hover:rotate-12 transition-transform" />
+              </button>
+            )}
+          </div>
         </form>
-      </div>
+      </motion.div>
     </div>
   );
 };

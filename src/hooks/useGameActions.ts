@@ -1,7 +1,7 @@
 import { useCallback, useRef } from 'react';
 import { GameState, Character, SpecialAction, StoryPartType, AiScenePart, UserStoryPart, SystemMessagePart, ImageModel } from '../types';
 import * as orchestrator from '../services/orchestratorService';
-import { generateInitialImage, editImage, generateNarrativeStream } from '../services/geminiService';
+import { generateInitialImage, editImage } from '../services/geminiService';
 import { audioService } from '../services/audioService';
 import { getInitialState } from './useGameState';
 
@@ -80,6 +80,7 @@ export const useGameActions = (
       id: newStoryPartId,
       type: StoryPartType.AI_SCENE,
       text: '',
+      contentBlocks: newScene.contentBlocks,
       sceneTitle: newScene.sceneTitle,
       imagePrompt: newScene.imagePrompt,
       imageUrl: previousImageUrl,
@@ -151,6 +152,7 @@ export const useGameActions = (
                 }
                 return {
                     ...prev,
+                    currentSceneImageUrl: finalImageUrl,
                     locationImages: newLocationImages,
                     storyLog: prev.storyLog.map(part =>
                         part.id === newStoryPartId
@@ -180,6 +182,7 @@ export const useGameActions = (
                     if (res.type === 'npc') {
                         return {
                             ...prev,
+                            currentSceneImageUrl: res.imageUrl,
                             entityImages: updatedImages,
                             npcs: {
                                 ...prev.npcs,
@@ -189,6 +192,7 @@ export const useGameActions = (
                     } else if (res.type === 'enemy') {
                         return {
                             ...prev,
+                            currentSceneImageUrl: res.imageUrl,
                             entityImages: updatedImages,
                             combatState: prev.combatState ? {
                                 ...prev.combatState,
@@ -202,36 +206,7 @@ export const useGameActions = (
         });
     }
 
-    try {
-        setGameState(prev => ({ ...prev, loadingMessage: 'AI가 스토리를 작성하는 중...' }));
-        const stream = generateNarrativeStream(
-            updatedCharacter,
-            [], // We don't need full history for narrative stream, just the state
-            actionText,
-            newScene,
-            updatedPlan,
-            updatedLocationId,
-            updatedWorldMap,
-            updatedSummaries
-        );
-
-        let streamedText = '';
-        for await (const chunk of stream) {
-            streamedText += chunk;
-            setGameState(prev => ({
-                ...prev,
-                storyLog: prev.storyLog.map(part =>
-                    part.id === newStoryPartId
-                        ? { ...part, text: streamedText }
-                        : part
-                ),
-            }));
-        }
-    } catch (error) {
-        console.error("Error during narrative streaming:", error);
-    } finally {
-        setGameState(prev => ({ ...prev, isLoading: false }));
-    }
+    setGameState(prev => ({ ...prev, isLoading: false }));
     
     if (enemiesToBattle && enemiesToBattle.length > 0) {
         setGameState(prev => ({
@@ -409,7 +384,7 @@ export const useGameActions = (
     const systemMessage: SystemMessagePart = { id: crypto.randomUUID(), type: StoryPartType.SYSTEM_MESSAGE, text: resultText };
     setGameState(prev => ({ ...prev, storyLog: [...prev.storyLog, systemMessage], currentSkillCheck: null }));
     let outcome = d20Roll === 1 ? '대실패' : d20Roll === 20 ? '대성공' : total >= difficulty ? '성공' : '실패';
-    const outcomeMessage = `판정 결과: '${outcome}'. 내 캐릭터가 ${ability} 판정을 시도했고, 결과는 이러했습니다. 이 결과에 따른 이야기를 계속해주세요.`;
+    const outcomeMessage = `판정 결과: '${outcome}'. 내 캐릭터가 ${ability} 판정을 시도했고, 결과는 이러했습니다. 이 결과에 따른 이야기를 계속해주세요. (중요: 판정 결과만으로 갑자기 다른 장소로 이동하지 말고, 현재 장소("${gameState.worldMap?.[gameState.currentLocationId || '']?.name || '알 수 없음'}")에서의 상황 변화를 묘사해주세요.)`;
     handleSendAction(outcomeMessage);
   };
 

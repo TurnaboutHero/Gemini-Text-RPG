@@ -1,6 +1,7 @@
 import React from 'react';
 import { WorldMap as WorldMapType } from '../types';
-import { FaTimes } from 'react-icons/fa';
+import { motion } from 'motion/react';
+import { X } from 'lucide-react';
 
 interface WorldMapProps {
   worldMap: WorldMapType | null;
@@ -55,11 +56,17 @@ const WorldMap: React.FC<WorldMapProps> = ({ worldMap, currentLocationId, mapIma
   const nodeMap = new Map(nodePositions.map(p => [p.id, p]));
 
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
       className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 fade-in"
       onClick={onClose}
     >
-      <div
+      <motion.div
+        initial={{ scale: 0.95, y: 20 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.95, y: 20 }}
         className="w-full max-w-5xl bg-gray-800/90 border border-cyan-500/30 rounded-lg shadow-lg shadow-cyan-500/20 p-6 text-gray-200 relative aspect-video flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
@@ -68,7 +75,7 @@ const WorldMap: React.FC<WorldMapProps> = ({ worldMap, currentLocationId, mapIma
           className="absolute top-3 right-3 text-gray-400 hover:text-white transition-colors z-20"
           aria-label="월드맵 닫기"
         >
-          <FaTimes className="h-6 w-6" />
+          <X className="h-6 w-6" />
         </button>
         <h2 className="text-2xl font-bold text-cyan-300 font-adventure tracking-wider text-center mb-4 flex-shrink-0">
           지역 지도
@@ -144,8 +151,8 @@ const WorldMap: React.FC<WorldMapProps> = ({ worldMap, currentLocationId, mapIma
             })}
           </svg>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };
 

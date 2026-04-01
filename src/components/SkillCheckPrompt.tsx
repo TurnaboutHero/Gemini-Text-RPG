@@ -1,5 +1,6 @@
 import React from 'react';
 import { SkillCheck } from '../types';
+import { Dices } from 'lucide-react';
 
 interface SkillCheckPromptProps {
   skillCheck: SkillCheck;
@@ -18,8 +19,9 @@ const SkillCheckPrompt: React.FC<SkillCheckPromptProps> = ({ skillCheck, onRoll 
       </p>
       <button
         onClick={onRoll}
-        className="mt-2 bg-cyan-600 text-white font-bold rounded-lg py-3 px-8 text-lg hover:bg-cyan-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-cyan-500 transition-all duration-300 transform hover:scale-105"
+        className="mt-2 bg-cyan-600 text-white font-bold rounded-lg py-3 px-8 text-lg hover:bg-cyan-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-cyan-500 transition-all duration-300 transform hover:scale-105 flex items-center justify-center gap-2 mx-auto"
       >
+        <Dices className="w-5 h-5" />
         20면체 주사위 굴림
       </button>
     </div>

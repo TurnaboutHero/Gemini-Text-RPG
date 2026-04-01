@@ -95,10 +95,48 @@ export const useInventory = (
     });
   }, [setGameState]);
 
+  const handleUseItem = useCallback((item: Item) => {
+    setGameState(prev => {
+      if (!prev.character || item.itemType !== 'consumable') return prev;
+
+      const newCharacter = { ...prev.character };
+      const newInventory = newCharacter.inventory.filter(i => i.id !== item.id);
+      newCharacter.inventory = newInventory;
+
+      let message = `${item.name}을(를) 사용했습니다.`;
+
+      if (item.effects) {
+        if (item.effects.maxHp) {
+          newCharacter.hp = Math.min(newCharacter.maxHp, newCharacter.hp + item.effects.maxHp);
+          message += ` 체력이 ${item.effects.maxHp} 회복되었습니다.`;
+        }
+        if (item.effects.maxMp) {
+          newCharacter.mp = Math.min(newCharacter.maxMp, newCharacter.mp + item.effects.maxMp);
+          message += ` 마나가 ${item.effects.maxMp} 회복되었습니다.`;
+        }
+      }
+
+      const systemMessage: SystemMessagePart = {
+        id: crypto.randomUUID(),
+        type: StoryPartType.SYSTEM_MESSAGE,
+        text: message
+      };
+
+      audioService.playSfx('ui_click');
+
+      return {
+        ...prev,
+        character: newCharacter,
+        storyLog: [...prev.storyLog, systemMessage]
+      };
+    });
+  }, [setGameState]);
+
   return {
     handleBuyItem,
     handleSellItem,
     handleEquipItem,
     handleUnequipItem,
+    handleUseItem,
   };
 };

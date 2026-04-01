@@ -23,9 +23,10 @@ const SuggestedActions: React.FC<SuggestedActionsProps> = ({ actions, onActionSe
             key={index}
             onClick={() => handleClick(action)}
             disabled={disabled}
-            className="bg-gray-700/80 text-cyan-200 text-sm text-left font-adventure tracking-wider rounded-lg px-4 py-2 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-cyan-500 transition-all duration-300 disabled:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="bg-bg-card/40 border border-white/10 text-primary/80 text-xs md:text-sm text-left font-adventure tracking-widest rounded-lg px-4 py-3 hover:bg-primary/10 hover:border-primary/30 hover:text-primary focus:outline-none transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed group relative overflow-hidden shadow-lg"
           >
-        {action}
+            <div className="absolute top-0 left-0 w-1 h-full bg-primary/10 group-hover:bg-primary/40 transition-colors" />
+            <span className="truncate block font-bold">{action}</span>
           </button>
         ))}
       </div>

@@ -1,6 +1,6 @@
 import React from 'react';
-import { Character, Item, ItemSlot, StatEffect } from '../types';
-import { FaPlus, FaMinus, FaQuestionCircle, FaHandPaper, FaShieldAlt, FaTshirt } from 'react-icons/fa';
+import { Character, Item, ItemSlot, StatEffect, ItemType } from '../types';
+import { Plus, Minus, HelpCircle, Hand, Shield, Shirt, Sword, FlaskConical, Scroll, Package } from 'lucide-react';
 
 interface InventoryProps {
     character: Character;
@@ -9,10 +9,18 @@ interface InventoryProps {
 }
 
 const slotIcons: Record<ItemSlot, React.ReactNode> = {
-    mainHand: <FaHandPaper />,
-    offHand: <FaShieldAlt />,
-    armor: <FaTshirt />,
-    none: <FaQuestionCircle />,
+    mainHand: <Hand />,
+    offHand: <Shield />,
+    armor: <Shirt />,
+    none: <HelpCircle />,
+};
+
+const itemTypeIcons: Record<ItemType, React.ReactNode> = {
+    weapon: <Sword size={14} className="text-red-400" />,
+    armor: <Shield size={14} className="text-blue-400" />,
+    consumable: <FlaskConical size={14} className="text-green-400" />,
+    quest: <Scroll size={14} className="text-yellow-400" />,
+    misc: <Package size={14} className="text-gray-400" />,
 };
 
 const slotNames: Record<ItemSlot, string> = {
@@ -49,7 +57,7 @@ const EquipmentSlot: React.FC<{
                     className="w-7 h-7 flex-shrink-0 bg-red-800 text-white rounded-md flex items-center justify-center hover:bg-red-700 transition-colors"
                     aria-label={`${item.name} 장착 해제`}
                 >
-                    <FaMinus size={12}/>
+                    <Minus size={12}/>
                 </button>
             )}
         </div>
@@ -89,12 +97,18 @@ const Inventory: React.FC<InventoryProps> = ({ character, onEquipItem, onUnequip
                             return (
                                 <li key={item.id} className="bg-gray-700/50 p-3 rounded-lg flex justify-between items-center">
                                     <div>
-                                        <p className="font-bold text-gray-200">{item.name}</p>
-                                        <p className="text-xs text-gray-400">{item.description}</p>
+                                        <div className="flex items-center gap-2">
+                                            {itemTypeIcons[item.itemType] || <Package size={14} className="text-gray-400" />}
+                                            <p className="font-bold text-gray-200">{item.name}</p>
+                                        </div>
+                                        <p className="text-xs text-gray-400 mt-1">{item.description}</p>
                                         {item.effects && (
                                             <div className="flex flex-wrap gap-x-2 gap-y-1 mt-1">
                                                 {Object.entries(item.effects).map(([key, value]) => renderEffect(key, value))}
                                             </div>
+                                        )}
+                                        {item.value > 0 && (
+                                            <p className="text-xs text-yellow-400 mt-1 font-bold">{item.value} G</p>
                                         )}
                                     </div>
                                     {isEquippable && (
@@ -103,7 +117,7 @@ const Inventory: React.FC<InventoryProps> = ({ character, onEquipItem, onUnequip
                                             className="w-8 h-8 flex-shrink-0 bg-green-700 text-white rounded-md flex items-center justify-center hover:bg-green-600 transition-colors ml-4"
                                             aria-label={`${item.name} 장착`}
                                         >
-                                            <FaPlus />
+                                            <Plus />
                                         </button>
                                     )}
                                 </li>

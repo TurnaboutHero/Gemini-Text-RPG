@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Character, Item } from '../types';
-import { FaTimes, FaCoins, FaShoppingCart, FaTags } from 'react-icons/fa';
+import { Character, Item, ItemType } from '../types';
+import { motion } from 'motion/react';
+import { X, Coins, ShoppingCart, Tag, Sword, Shield, FlaskConical, Scroll, Package } from 'lucide-react';
 
 interface ShopProps {
   character: Character;
@@ -10,6 +11,14 @@ interface ShopProps {
   onSell: (item: Item) => void;
 }
 
+const itemTypeIcons: Record<ItemType, React.ReactNode> = {
+    weapon: <Sword size={14} className="text-red-400" />,
+    armor: <Shield size={14} className="text-blue-400" />,
+    consumable: <FlaskConical size={14} className="text-green-400" />,
+    quest: <Scroll size={14} className="text-yellow-400" />,
+    misc: <Package size={14} className="text-gray-400" />,
+};
+
 const Shop: React.FC<ShopProps> = ({ character, shop, onClose, onBuy, onSell }) => {
   const [activeTab, setActiveTab] = useState<'buy' | 'sell'>('buy');
 
@@ -17,12 +26,20 @@ const Shop: React.FC<ShopProps> = ({ character, shop, onClose, onBuy, onSell }) 
     setActiveTab(tab);
   };
 
+  const equippedItemIds = new Set(Object.values(character.equipment));
+
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
       className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 fade-in"
       onClick={onClose}
     >
-      <div
+      <motion.div
+        initial={{ scale: 0.95, y: 20 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.95, y: 20 }}
         className="w-full max-w-2xl bg-gray-800/90 border border-yellow-500/30 rounded-lg shadow-lg shadow-yellow-500/20 p-6 text-gray-200 relative max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
@@ -31,14 +48,14 @@ const Shop: React.FC<ShopProps> = ({ character, shop, onClose, onBuy, onSell }) 
           className="absolute top-3 right-3 text-gray-400 hover:text-white transition-colors z-10"
           aria-label="상점 닫기"
         >
-          <FaTimes className="h-6 w-6" />
+          <X className="h-6 w-6" />
         </button>
 
         {/* Header */}
         <div className="text-center mb-4">
             <h1 className="text-3xl font-bold text-yellow-300 font-adventure tracking-wider">{shop.name}</h1>
             <div className="flex items-center justify-center gap-2 mt-2 text-yellow-400 bg-gray-900/50 px-3 py-1 rounded-full">
-                <FaCoins />
+                <Coins size={16} />
                 <span className="font-bold text-lg">{character.gold} G</span>
             </div>
         </div>
@@ -46,10 +63,10 @@ const Shop: React.FC<ShopProps> = ({ character, shop, onClose, onBuy, onSell }) 
         {/* Tabs */}
         <div className="flex border-b border-gray-700 mb-4">
             <button onClick={() => handleTabChange('buy')} className={`flex-1 py-2 text-sm font-bold transition-colors flex items-center justify-center gap-2 ${activeTab === 'buy' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-500 hover:text-gray-300'}`}>
-                <FaShoppingCart /> 구매
+                <ShoppingCart size={16} /> 구매
             </button>
             <button onClick={() => handleTabChange('sell')} className={`flex-1 py-2 text-sm font-bold transition-colors flex items-center justify-center gap-2 ${activeTab === 'sell' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-500 hover:text-gray-300'}`}>
-                <FaTags /> 판매
+                <Tag size={16} /> 판매
             </button>
         </div>
         
@@ -63,8 +80,11 @@ const Shop: React.FC<ShopProps> = ({ character, shop, onClose, onBuy, onSell }) 
                         return (
                             <li key={item.id} className="bg-gray-700/50 p-3 rounded-lg flex justify-between items-center">
                                 <div>
-                                    <p className="font-bold text-gray-200">{item.name}</p>
-                                    <p className="text-xs text-gray-400">{item.description}</p>
+                                    <div className="flex items-center gap-2">
+                                        {itemTypeIcons[item.itemType] || <Package size={14} className="text-gray-400" />}
+                                        <p className="font-bold text-gray-200">{item.name}</p>
+                                    </div>
+                                    <p className="text-xs text-gray-400 mt-1">{item.description}</p>
                                 </div>
                                 <div className="text-right flex-shrink-0 ml-4">
                                     <p className="font-bold text-yellow-400">{price} G</p>
@@ -81,36 +101,42 @@ const Shop: React.FC<ShopProps> = ({ character, shop, onClose, onBuy, onSell }) 
                     })}
                 </ul>
             )}
-            {activeTab === 'sell' && (
-                <ul className="space-y-2">
-                     {character.inventory.length === 0 ? (
-                        <p className="text-center text-gray-500 italic mt-4">판매할 아이템이 없습니다.</p>
-                    ) : (
-                        character.inventory.filter(item => item.value > 0).map(item => {
-                            const price = item.value;
-                            return (
-                                <li key={item.id} className="bg-gray-700/50 p-3 rounded-lg flex justify-between items-center">
-                                    <div>
-                                        <p className="font-bold text-gray-200">{item.name}</p>
-                                    </div>
-                                    <div className="text-right flex-shrink-0 ml-4">
-                                        <p className="font-bold text-green-400">{price} G</p>
-                                        <button
-                                            onClick={() => onSell(item)}
-                                            className="mt-1 text-xs bg-red-700 text-white font-bold rounded-md py-1 px-3 hover:bg-red-600"
-                                        >
-                                            판매
-                                        </button>
-                                    </div>
-                                </li>
-                            );
-                        })
-                    )}
-                </ul>
-            )}
+            {activeTab === 'sell' && (() => {
+                const sellableItems = character.inventory.filter(item => item.value > 0 && !equippedItemIds.has(item.id));
+                return (
+                    <ul className="space-y-2">
+                        {sellableItems.length === 0 ? (
+                            <p className="text-center text-gray-500 italic mt-4">판매할 아이템이 없습니다.</p>
+                        ) : (
+                            sellableItems.map(item => {
+                                const price = item.value;
+                                return (
+                                    <li key={item.id} className="bg-gray-700/50 p-3 rounded-lg flex justify-between items-center">
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                {itemTypeIcons[item.itemType] || <Package size={14} className="text-gray-400" />}
+                                                <p className="font-bold text-gray-200">{item.name}</p>
+                                            </div>
+                                        </div>
+                                        <div className="text-right flex-shrink-0 ml-4">
+                                            <p className="font-bold text-green-400">{price} G</p>
+                                            <button
+                                                onClick={() => onSell(item)}
+                                                className="mt-1 text-xs bg-red-700 text-white font-bold rounded-md py-1 px-3 hover:bg-red-600"
+                                            >
+                                                판매
+                                            </button>
+                                        </div>
+                                    </li>
+                                );
+                            })
+                        )}
+                    </ul>
+                );
+            })()}
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };
 

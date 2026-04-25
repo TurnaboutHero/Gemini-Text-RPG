@@ -392,6 +392,67 @@ export const useGameActions = (
     handleContinueGame(); // Re-load last saved state
   };
 
+  const handleGenerateVideo = async (storyPartId: string, prompt: string, imageUrl: string) => {
+    if (gameState.isLoading) return;
+
+    const perform = async () => {
+      // Prompt for API key as required by Veo model
+      const hasKey = await window.aistudio.hasSelectedApiKey();
+      if (!hasKey) {
+        await window.aistudio.openSelectKey();
+      }
+
+      setGameState(prev => ({
+        ...prev,
+        storyLog: prev.storyLog.map(part => 
+          part.id === storyPartId && part.type === StoryPartType.AI_SCENE 
+            ? { ...part, isGeneratingVideo: true } as AiScenePart
+            : part
+        ),
+      }));
+
+      try {
+        const { generateVideoFromImage } = await import('../services/geminiService');
+        const videoUrl = await generateVideoFromImage(prompt, imageUrl);
+        
+        setGameState(prev => ({
+          ...prev,
+          storyLog: prev.storyLog.map(part => 
+            part.id === storyPartId && part.type === StoryPartType.AI_SCENE 
+              ? { ...part, isGeneratingVideo: false, videoUrl } as AiScenePart
+              : part
+          ),
+        }));
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.';
+        if (errorMessage.includes('Requested entity was not found.') || errorMessage.includes('403') || errorMessage.includes('Permission') || errorMessage.includes('다시 선택해 주세요')) {
+           setGameState(prev => {
+             const newLog = prev.storyLog.map(part => 
+               part.id === storyPartId && part.type === StoryPartType.AI_SCENE 
+                 ? { ...part, isGeneratingVideo: false } as AiScenePart
+                 : part
+             );
+             return { ...prev, hasApiKey: false, storyLog: newLog, error: 'API 키가 유효하지 않거나 권한이 없습니다. 다시 선택해주세요.' };
+           });
+           await window.aistudio.openSelectKey();
+           return;
+        }
+        
+        setGameState(prev => ({
+          ...prev,
+          error: errorMessage,
+          storyLog: prev.storyLog.map(part => 
+            part.id === storyPartId && part.type === StoryPartType.AI_SCENE 
+              ? { ...part, isGeneratingVideo: false } as AiScenePart
+              : part
+          ),
+        }));
+      }
+    };
+    
+    handleAction(perform);
+  };
+
   return {
     handleSendAction,
     handleCharacterCreate,
@@ -399,6 +460,7 @@ export const useGameActions = (
     handleExecuteSpecialAction,
     handleRollSkillCheck,
     handleRestartFromDefeat,
+    handleGenerateVideo,
     handleRetry,
     lastActionRef
   };

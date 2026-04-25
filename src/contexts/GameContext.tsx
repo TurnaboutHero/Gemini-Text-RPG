@@ -22,6 +22,7 @@ interface GameContextType {
     handleExecuteSpecialAction: (action: SpecialAction) => void;
     handleRollSkillCheck: () => void;
     handleRestartFromDefeat: () => void;
+    handleGenerateVideo: (storyPartId: string, prompt: string, imageUrl: string) => Promise<void>;
     handleRetry: () => void;
     addUiEffect: (text: string, color: string, elementId: string) => void;
     removeUiEffect: (id: string) => void;
@@ -83,6 +84,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       handleExecuteSpecialAction: gameActions.handleExecuteSpecialAction,
       handleRollSkillCheck: gameActions.handleRollSkillCheck,
       handleRestartFromDefeat: gameActions.handleRestartFromDefeat,
+      handleGenerateVideo: gameActions.handleGenerateVideo,
       handleRetry: gameActions.handleRetry,
       addUiEffect,
       removeUiEffect,

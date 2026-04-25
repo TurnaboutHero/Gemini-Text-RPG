@@ -2,6 +2,8 @@ import React from 'react';
 import Markdown from 'react-markdown';
 import { AiScenePart, Character, Npc, ContentBlock } from '../types';
 import { motion } from 'motion/react';
+import { useGame } from '../contexts/GameContext';
+import { Film } from 'lucide-react';
 
 interface CurrentSceneProps {
   part: AiScenePart;
@@ -62,6 +64,8 @@ const DialogueBlockComponent: React.FC<{ block: ContentBlock; character: Charact
 };
 
 const CurrentScene: React.FC<CurrentSceneProps> = ({ part, character, npcs, useImageGeneration }) => {
+  const { actions } = useGame();
+
   return (
     <div className="flex flex-col h-full max-w-4xl mx-auto w-full pb-10">
       {/* Scene Title */}
@@ -78,7 +82,21 @@ const CurrentScene: React.FC<CurrentSceneProps> = ({ part, character, npcs, useI
 
       {/* Image Display */}
       <div className="relative mb-10">
-        {part.isGeneratingImage ? (
+        {part.isGeneratingVideo ? (
+          <div className="w-full aspect-video bg-bg-card/50 border border-white/10 rounded-3xl flex flex-col items-center justify-center animate-pulse">
+            <div className="w-16 h-16 border-4 border-accent/30 border-t-accent rounded-full animate-spin mb-6" />
+            <p className="text-sm text-accent/80 uppercase tracking-[0.4em] font-adventure">Generating Video with Veo...</p>
+            <p className="text-xs text-gray-500 mt-2">이 작업은 최대 몇 분이 소요될 수 있습니다.</p>
+          </div>
+        ) : part.videoUrl ? (
+          <motion.div 
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="w-full rounded-3xl overflow-hidden border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] relative group bg-black"
+          >
+            <video src={part.videoUrl} autoPlay loop controls playsInline className="w-full h-auto max-h-[600px] object-cover" />
+          </motion.div>
+        ) : part.isGeneratingImage ? (
           <div className="w-full aspect-video bg-bg-card/50 border border-white/10 rounded-3xl flex flex-col items-center justify-center animate-pulse">
             <div className="w-16 h-16 border-4 border-primary/30 border-t-primary rounded-full animate-spin mb-6" />
             <p className="text-sm text-primary/50 uppercase tracking-[0.4em] font-adventure">Visualizing Narrative...</p>
@@ -90,7 +108,16 @@ const CurrentScene: React.FC<CurrentSceneProps> = ({ part, character, npcs, useI
               className="w-full rounded-3xl overflow-hidden border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] relative group"
           >
             <img src={part.imageUrl} alt={part.sceneTitle} className="w-full h-auto max-h-[600px] object-cover" />
-            <div className="absolute inset-0 bg-gradient-to-t from-bg-deep/80 via-transparent to-transparent opacity-60" />
+            <div className="absolute inset-0 bg-gradient-to-t from-bg-deep/80 via-transparent to-transparent opacity-60 pointer-events-none" />
+            
+            <button
+              onClick={() => actions.handleGenerateVideo(part.id, part.imagePrompt, part.imageUrl)}
+              className="absolute bottom-4 right-4 bg-bg-deep/80 hover:bg-bg-deep border border-accent/30 text-accent font-bold py-2 px-4 rounded-full flex items-center gap-2 backdrop-blur-sm transition-all shadow-lg hover:shadow-accent/20 z-10"
+              title="Veo 2 모델을 사용하여 동영상 생성 (API 키 필요)"
+            >
+              <Film className="w-4 h-4" />
+              <span className="text-sm">동영상 생성</span>
+            </button>
           </motion.div>
         ) : null}
       </div>

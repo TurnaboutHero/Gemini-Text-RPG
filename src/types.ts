@@ -87,6 +87,8 @@ export interface AiScenePart {
   imagePrompt: string;
   imageUrl: string;
   isGeneratingImage: boolean;
+  videoUrl?: string;
+  isGeneratingVideo?: boolean;
   suggestedActions: string[];
   skillCheck?: SkillCheck;
   isChapterComplete?: boolean;

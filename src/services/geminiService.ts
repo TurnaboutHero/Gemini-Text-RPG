@@ -541,6 +541,68 @@ const buildImagePrompt = (basePrompt: string, type: 'scene' | 'character' | 'map
     }
 };
 
+export const generateVideoFromImage = async (prompt: string, imageUrl: string): Promise<string> => {
+    try {
+        console.log("generateVideoFromImage started");
+        const ai = getAiInstance();
+        
+        // Extract base64 and mime type. Format: data:image/jpeg;base64,...
+        const match = imageUrl.match(/^data:(image\/[a-zA-Z]*);base64,([^"]*)$/);
+        if (!match) {
+            throw new Error("올바른 이미지 형식이 아닙니다.");
+        }
+        const mimeType = match[1];
+        const base64Data = match[2];
+
+        const fullPrompt = prompt ? `${prompt}, cinematic movement, high quality, masterpiece` : 'Epic fantasy scene coming to life, slight camera pan, atmospheric effects, masterpiece, high quality';
+
+        let operation = await ai.models.generateVideos({
+            model: 'veo-3.1-lite-generate-preview',
+            prompt: fullPrompt,
+            image: {
+                imageBytes: base64Data,
+                mimeType: mimeType,
+            },
+            config: {
+                numberOfVideos: 1,
+                resolution: '720p',
+                aspectRatio: '16:9'
+            }
+        });
+
+        // Polling logic
+        while (!operation.done) {
+            await new Promise(resolve => setTimeout(resolve, 8000));
+            operation = await ai.operations.getVideosOperation({operation: operation});
+        }
+
+        const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
+        if (!downloadLink) throw new Error("동영상 생성에 실패했습니다 (URL이 반환되지 않음).");
+
+        const response = await fetch(downloadLink, {
+            method: 'GET',
+            headers: {
+                'x-goog-api-key': getApiKey(),
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error(`동영상 다운로드 실패: ${response.statusText}`);
+        }
+
+        const blob = await response.blob();
+        const videoUrl = URL.createObjectURL(blob);
+        return videoUrl;
+    } catch (error) {
+        console.error("Error generating video:", error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage.includes('PERMISSION_DENIED') || errorMessage.includes('403') || errorMessage.includes('Requested entity was not found')) {
+            throw new Error('API 키 권한이 없거나 유효하지 않습니다. 다시 선택해 주세요.');
+        }
+        throw new Error(`동영상을 생성하지 못했습니다: ${errorMessage}`);
+    }
+};
+
 export const generateInitialImage = async (prompt: string, model: ImageModel = 'gemini-2.5-flash-image'): Promise<string> => {
     try {
         console.log("generateInitialImage started");

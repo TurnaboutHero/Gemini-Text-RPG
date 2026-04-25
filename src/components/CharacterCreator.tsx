@@ -470,9 +470,20 @@ const CharacterCreator: React.FC<CharacterCreatorProps> = ({ onCharacterCreate, 
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
-                    <input id="image-upload" type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                    <input id="image-upload" type="file" accept="image/*" onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file && file.type.startsWith('image/')) {
+                          setReferenceImageFile(file);
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                              setReferenceImageUrl(reader.result as string);
+                              setCharacterImageUrl(reader.result as string); // Add direct set
+                          };
+                          reader.readAsDataURL(file);
+                      }
+                    }} className="hidden" />
                     <label htmlFor="image-upload" className="flex items-center justify-center gap-2 bg-white/5 border border-white/10 text-gray-400 font-adventure tracking-widest rounded-xl py-2 hover:bg-white/10 hover:text-white transition-all cursor-pointer text-[9px] uppercase">
-                      <Upload className="w-3 h-3" /> 참조 업로드
+                      <Upload className="w-3 h-3" /> 직접 업로드
                     </label>
                     <button 
                       type="button" 
@@ -481,7 +492,7 @@ const CharacterCreator: React.FC<CharacterCreatorProps> = ({ onCharacterCreate, 
                       className="flex items-center justify-center gap-2 bg-primary/10 border border-primary/30 text-primary font-adventure tracking-widest rounded-xl py-2 hover:bg-primary/20 transition-all disabled:opacity-30 disabled:cursor-not-allowed uppercase text-[9px]"
                     >
                       <RefreshCw className={`w-3 h-3 ${isGeneratingImage ? 'animate-spin' : ''}`} />
-                      생성하기
+                      AI로 생성
                     </button>
                   </div>
                   {imageError && <p className="text-red-400 text-[8px] text-center font-mono">{imageError}</p>}

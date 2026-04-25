@@ -146,8 +146,8 @@ const CharacterCreator: React.FC<CharacterCreatorProps> = ({ onCharacterCreate, 
         setCharacterImageUrl(imageUrl);
     } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
-        if (errorMessage.includes('PERMISSION_DENIED') || errorMessage.includes('403')) {
-            setImageError("API 키 권한이 없거나 유효하지 않습니다. 유료 프로젝트의 API 키를 다시 선택해 주세요.");
+        if (errorMessage.includes('PERMISSION_DENIED') || errorMessage.includes('403') || errorMessage.includes('429') || errorMessage.includes('할당량') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
+            setImageError("API 키 권한이 없거나 할당량을 초과했습니다. 유류 계정의 API 키를 다시 선택해 주세요.");
             await window.aistudio.openSelectKey();
         } else {
             setImageError(errorMessage);

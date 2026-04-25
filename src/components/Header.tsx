@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sun, Moon, CloudSun, CloudMoon, HelpCircle, Map, Image as ImageIcon, ImageOff, Sparkles } from 'lucide-react';
+import { Sun, Moon, CloudSun, CloudMoon, HelpCircle, Map, Image as ImageIcon, ImageOff, Sparkles, Volume2, VolumeX } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface HeaderProps {
@@ -7,7 +7,9 @@ interface HeaderProps {
   currentTime: number;
   currentLocationName: string;
   useImageGeneration: boolean;
+  isAudioMuted: boolean;
   onToggleImageGeneration: () => void;
+  onToggleAudio: () => void;
   onOpenMap: () => void;
   onOpenCharacterSheet: () => void;
 }
@@ -19,7 +21,7 @@ const getTimeInfo = (hour: number): { period: string; icon: React.ReactNode } =>
     return { period: '밤', icon: <Moon className="text-indigo-400 w-4 h-4" /> };
 };
 
-const Header: React.FC<HeaderProps> = ({ title, currentTime, currentLocationName, useImageGeneration, onToggleImageGeneration, onOpenMap, onOpenCharacterSheet }) => {
+const Header: React.FC<HeaderProps> = ({ title, currentTime, currentLocationName, useImageGeneration, isAudioMuted, onToggleImageGeneration, onToggleAudio, onOpenMap, onOpenCharacterSheet }) => {
     const { icon, period } = getTimeInfo(currentTime);
 
     return (
@@ -56,6 +58,14 @@ const Header: React.FC<HeaderProps> = ({ title, currentTime, currentLocationName
                         />
                     </div>
                 </div>
+
+                <button 
+                    onClick={onToggleAudio}
+                    className={`h-9 w-9 flex items-center justify-center rounded-xl border transition-all ${!isAudioMuted ? 'bg-primary/10 border-primary/30 text-primary shadow-[0_0_15px_rgba(212,175,55,0.1)]' : 'bg-white/5 border-white/10 text-gray-500 hover:text-gray-300'}`}
+                    title={!isAudioMuted ? "배경음악 끄기" : "배경음악 켜기"}
+                >
+                    {!isAudioMuted ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+                </button>
 
                 <button 
                     onClick={onToggleImageGeneration}

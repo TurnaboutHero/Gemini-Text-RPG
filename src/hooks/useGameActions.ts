@@ -36,8 +36,8 @@ export const useGameActions = (
       await actionFn();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.';
-      if (errorMessage.includes('Requested entity was not found.') || errorMessage.includes('403') || errorMessage.includes('Permission')) {
-         setGameState(prev => ({ ...prev, hasApiKey: false, isLoading: false, error: 'API 키가 유효하지 않거나 권한이 없습니다. 다시 선택해주세요.' }));
+      if (errorMessage.includes('Requested entity was not found.') || errorMessage.includes('403') || errorMessage.includes('Permission') || errorMessage.includes('429') || errorMessage.includes('할당량') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
+         setGameState(prev => ({ ...prev, hasApiKey: false, isLoading: false, error: 'API 키 권한이 없거나 할당량을 초과했습니다. 다시 선택해주세요.' }));
          await window.aistudio.openSelectKey();
          return;
       }
@@ -327,8 +327,8 @@ export const useGameActions = (
         
     } catch (err) {
         const errorMessage = err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.';
-        if (errorMessage.includes('Requested entity was not found.') || errorMessage.includes('403') || errorMessage.includes('Permission')) {
-            setGameState(prev => ({ ...prev, hasApiKey: false, isLoading: false, error: 'API 키가 유효하지 않거나 권한이 없습니다. 다시 선택해주세요.', gamePhase: 'character_creation' }));
+        if (errorMessage.includes('Requested entity was not found.') || errorMessage.includes('403') || errorMessage.includes('Permission') || errorMessage.includes('429') || errorMessage.includes('할당량') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
+            setGameState(prev => ({ ...prev, hasApiKey: false, isLoading: false, error: 'API 키 권한이 없거나 할당량을 초과했습니다. 다시 선택해주세요.', gamePhase: 'character_creation' }));
             await window.aistudio.openSelectKey();
             return;
         }
@@ -425,14 +425,14 @@ export const useGameActions = (
         }));
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.';
-        if (errorMessage.includes('Requested entity was not found.') || errorMessage.includes('403') || errorMessage.includes('Permission') || errorMessage.includes('다시 선택해 주세요')) {
+        if (errorMessage.includes('Requested entity was not found.') || errorMessage.includes('403') || errorMessage.includes('Permission') || errorMessage.includes('429') || errorMessage.includes('RESOURCE_EXHAUSTED') || errorMessage.includes('할당량') || errorMessage.includes('다시 선택해 주세요')) {
            setGameState(prev => {
              const newLog = prev.storyLog.map(part => 
                part.id === storyPartId && part.type === StoryPartType.AI_SCENE 
                  ? { ...part, isGeneratingVideo: false } as AiScenePart
                  : part
              );
-             return { ...prev, hasApiKey: false, storyLog: newLog, error: 'API 키가 유효하지 않거나 권한이 없습니다. 다시 선택해주세요.' };
+             return { ...prev, hasApiKey: false, storyLog: newLog, error: 'API 키 권한이 없거나 할당량을 초과했습니다. 다시 선택해주세요.' };
            });
            await window.aistudio.openSelectKey();
            return;

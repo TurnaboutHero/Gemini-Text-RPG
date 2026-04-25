@@ -4,6 +4,7 @@ import { MessageSquare, History, ScrollText, ShoppingBag, User } from "lucide-re
 
 import { StoryPartType, AiScenePart } from './types';
 import { useGame } from './contexts/GameContext';
+import { useBackgroundMusic } from './hooks/useBackgroundMusic';
 
 // Components
 import Introduction from './components/Introduction';
@@ -43,6 +44,13 @@ const App: React.FC = () => {
     inventory,
     combat
   } = useGame();
+
+  const audioService = useBackgroundMusic();
+  const [isAudioMuted, setIsAudioMuted] = useState(audioService.getIsMuted());
+
+  const handleToggleAudio = useCallback(() => {
+    setIsAudioMuted(audioService.toggleMute());
+  }, [audioService]);
 
   const {
     handleStartCreation,
@@ -164,7 +172,9 @@ const App: React.FC = () => {
         currentTime={gameState.currentTime} 
         currentLocationName={currentLocationName}
         useImageGeneration={gameState.useImageGeneration}
+        isAudioMuted={isAudioMuted}
         onToggleImageGeneration={toggleImageGeneration}
+        onToggleAudio={handleToggleAudio}
         onOpenMap={() => setIsMapOpen(true)}
         onOpenCharacterSheet={() => setIsCharacterSheetOpen(true)}
       />

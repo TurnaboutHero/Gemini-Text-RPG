@@ -196,6 +196,8 @@ export const processPlayerAction = async (
               description: npcData.description,
               imageUrl: newEntityImages[npcData.name] || '',
               affinity: 50, // Default affinity
+              faction: npcData.faction,
+              memories: [],
           };
           if (useImageGeneration && !newEntityImages[npcData.name]) {
               const p = generateCharacterImage(npcData.imagePrompt, npcData.name, null, imageModel)
@@ -258,6 +260,23 @@ export const processPlayerAction = async (
                   id: crypto.randomUUID(),
                   type: StoryPartType.SYSTEM_MESSAGE,
                   text: `${npc.name}의 호감도가 ${change.change > 0 ? '상승' : '하락'}했습니다. (현재: ${npc.affinity})`
+              });
+          }
+      });
+  }
+
+  if (newScene.newNpcMemories) {
+      newScene.newNpcMemories.forEach(mem => {
+          const npcId = Object.keys(updatedNpcs).find(id => updatedNpcs[id].name === mem.npcName);
+          if (npcId) {
+              const npc = { ...updatedNpcs[npcId] };
+              if (!npc.memories) npc.memories = [];
+              npc.memories.push(mem.memory);
+              updatedNpcs[npcId] = npc;
+              systemMessages.push({
+                  id: crypto.randomUUID(),
+                  type: StoryPartType.SYSTEM_MESSAGE,
+                  text: `${npc.name}(이)가 플레이어에 대한 새로운 기억을 가졌습니다: "${mem.memory}"`
               });
           }
       });

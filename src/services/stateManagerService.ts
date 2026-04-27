@@ -17,6 +17,19 @@ export const processStateChanges = (
     systemMessages.push({ id: crypto.randomUUID(), type: StoryPartType.SYSTEM_MESSAGE, text: `골드 변경: ${changeText}` });
   }
 
+  if (response.reputationChanges) {
+      if (!updatedCharacter.reputations) updatedCharacter.reputations = {};
+      response.reputationChanges.forEach(change => {
+          const currentRep = updatedCharacter.reputations[change.faction] || 0;
+          updatedCharacter.reputations[change.faction] = Math.max(-100, Math.min(100, currentRep + change.change));
+          systemMessages.push({
+              id: crypto.randomUUID(),
+              type: StoryPartType.SYSTEM_MESSAGE,
+              text: `[${change.faction}] 평판 ${change.change > 0 ? '상승' : '하락'} (현재: ${updatedCharacter.reputations[change.faction]})`
+          });
+      });
+  }
+
   if (response.hpChange) {
     // Limit HP change to reasonable bounds
     const boundedHpChange = Math.max(-updatedCharacter.maxHp, Math.min(updatedCharacter.maxHp, response.hpChange));

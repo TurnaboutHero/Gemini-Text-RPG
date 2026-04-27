@@ -76,6 +76,8 @@ export interface Npc {
     description: string;
     imageUrl: string;
     affinity: number; // 0-100
+    faction?: string;
+    memories?: string[]; // Things the NPC remembers about the player
 }
 
 export interface AiScenePart {
@@ -144,6 +146,7 @@ export interface Character {
   inventory: Item[];
   skills: Skill[];
   gold: number;
+  reputations: Record<string, number>;
 }
 
 export type GamePhase = 'start_menu' | 'character_creation' | 'prologue' | 'in_game' | 'in_combat' | 'game_over';
@@ -268,8 +271,10 @@ export interface GeminiResponse {
   isChapterComplete?: boolean;
   isPlotPointComplete?: boolean;
   imageGenerationSetting?: 'NONE' | 'EDIT' | 'GENERATE';
-  newNpcs?: { name: string; description: string; imagePrompt: string }[];
+  newNpcs?: { name: string; description: string; imagePrompt: string; faction?: string }[];
   npcAffinityChanges?: { npcName: string; change: number }[];
+  newNpcMemories?: { npcName: string; memory: string }[];
+  reputationChanges?: { faction: string; change: number }[];
   goldChange?: number;
   playerMovedTo?: string; // New location ID
   timeElapsed?: number; // in hours

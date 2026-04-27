@@ -160,6 +160,20 @@ const CharacterSheet: React.FC<CharacterSheetProps> = ({ character, calculatedSt
                         </div>
                      </div>
                    )}
+
+                   {character.reputations && Object.keys(character.reputations).length > 0 && (
+                     <div className="mt-4">
+                        <h3 className="text-sm font-bold text-cyan-300 mb-1">세력 평판</h3>
+                        <div className="grid grid-cols-2 gap-2">
+                            {Object.entries(character.reputations).map(([faction, rep]) => (
+                                <div key={faction} className="bg-gray-700/30 p-2 rounded flex justify-between items-center text-sm">
+                                    <span className="text-gray-300">{faction}</span>
+                                    <span className={`font-bold ${rep > 0 ? 'text-green-400' : rep < 0 ? 'text-red-400' : 'text-gray-400'}`}>{rep > 0 ? `+${rep}` : rep}</span>
+                                </div>
+                            ))}
+                        </div>
+                     </div>
+                   )}
                 </div>
             )}
             {activeTab === 'inventory' && (

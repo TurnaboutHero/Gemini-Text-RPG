@@ -189,6 +189,7 @@ const CharacterCreator: React.FC<CharacterCreatorProps> = ({ onCharacterCreate, 
       statusEffects: [],
       inventory: startingInventory,
       gold: selectedBackground?.startingGold || 0,
+      reputations: {},
     };
     onCharacterCreate(finalCharacter, useImageGeneration, imageModel);
   };

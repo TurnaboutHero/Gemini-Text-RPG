@@ -112,15 +112,25 @@ const ActionMenu: React.FC<ActionMenuProps> = ({ isOpen, onClose, onExecuteActio
                   <div key={npc.id} className="bg-white/5 rounded-lg p-3 space-y-3">
                     <div className="flex flex-col">
                       <div className="flex justify-between items-center mb-1">
-                        <span className="text-[10px] font-bold text-gray-300">{npc.name}</span>
-                        <span className="text-[9px] text-primary/80">호감도: {npc.affinity || 50}</span>
+                        <span className="text-[10px] font-bold text-gray-300">
+                           {npc.name} 
+                           {npc.faction && <span className="text-gray-500 font-normal ml-1">({npc.faction})</span>}
+                        </span>
+                        <span className={`text-[9px] ${npc.affinity > 70 ? 'text-green-400' : npc.affinity < 30 ? 'text-red-400' : 'text-primary/80'}`}>
+                           호감도: {npc.affinity || 50}
+                        </span>
                       </div>
-                      <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
+                      <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden mb-2">
                         <div 
-                          className="h-full bg-primary transition-all duration-500" 
+                          className={`h-full transition-all duration-500 ${npc.affinity > 70 ? 'bg-green-500' : npc.affinity < 30 ? 'bg-red-500' : 'bg-primary'}`} 
                           style={{ width: `${npc.affinity || 50}%` }}
                         />
                       </div>
+                      {npc.memories && npc.memories.length > 0 && (
+                          <div className="text-[8px] text-gray-400 italic">
+                              방금 생각: {npc.memories[npc.memories.length - 1]}
+                          </div>
+                      )}
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <button

@@ -113,6 +113,7 @@ const sceneResponseSchema = {
                     name: { type: Type.STRING, description: "NPC의 이름." },
                     description: { type: Type.STRING, description: "NPC의 외모나 특징에 대한 간략한 묘사." },
                     imagePrompt: { type: Type.STRING, description: "NPC 초상화 생성을 위한 이미지 프롬프트." },
+                    faction: { type: Type.STRING, nullable: true, description: "NPC가 소속된 파벌 또는 세력. 무소속이라면 생략 가능." },
                 }, required: ["name", "description", "imagePrompt"]
             }
         },
@@ -123,6 +124,24 @@ const sceneResponseSchema = {
                     npcName: { type: Type.STRING, description: "호감도가 변하는 NPC의 이름." },
                     change: { type: Type.INTEGER, description: "호감도 변화량 (예: 5, -10)." },
                 }, required: ["npcName", "change"]
+            }
+        },
+        newNpcMemories: {
+            type: Type.ARRAY, nullable: true, description: "NPC가 플레이어에 대해 새롭게 기억하게 된 일들 (오랜 시간이 지나도 잊지 않을 중요한 사실들).",
+            items: {
+                type: Type.OBJECT, properties: {
+                    npcName: { type: Type.STRING, description: "기억하는 NPC 이름." },
+                    memory: { type: Type.STRING, description: "무엇을 기억하게 되었는지 (예: '나에게 소매치기를 시도했다', '나의 목숨을 구해주었다')." },
+                }, required: ["npcName", "memory"]
+            }
+        },
+        reputationChanges: {
+            type: Type.ARRAY, nullable: true, description: "플레이어의 행동을 통해 변동이 생기는 특정 세력 또는 파벌에 대한 평판.",
+            items: {
+                type: Type.OBJECT, properties: {
+                    faction: { type: Type.STRING, description: "파벌 또는 세력의 이름." },
+                    change: { type: Type.INTEGER, description: "평판 변화량 (예: 5, -10)." },
+                }, required: ["faction", "change"]
             }
         },
         isChapterComplete: { type: Type.BOOLEAN, nullable: true },
@@ -368,6 +387,14 @@ export const generateSceneState = async (
         };
         const timeOfDay = getTimeOfDay(currentTime);
         
+        const npcDescriptions = Object.values(npcs).map(n => 
+            `- ${n.name}: 호감도 ${n.affinity}/100, 파벌: ${n.faction || '없음'}, 기억: ${(n.memories || []).join(', ') || '없음'}`
+        ).join('\n');
+        
+        const repDescriptions = Object.entries(character.reputations || {}).map(([faction, rep]) => 
+            `- ${faction}: ${rep}`
+        ).join('\n');
+
         const contextForModel = `
         **현재 시간:** ${currentDay}일차, ${currentTime}시 (${timeOfDay})
         **현재 챕터:** "${chapterPlan.chapterTitle}"
@@ -375,11 +402,15 @@ export const generateSceneState = async (
         **현재 단계 목표:** ${currentPlotPoint.objective}
         **현재 위치:** ${currentLocation ? `${currentLocation.name} (${currentLocation.description})` : '알 수 없음'}
         **사용 가능한 출구:** ${currentLocation ? Object.keys(currentLocation.exits).join(', ') : '없음'}
-        **현재 등장인물:** ${[character.name, ...Object.keys(npcs)].join(', ')}
+        **알고 있는 NPC 정보:**
+        ${npcDescriptions || 'NPC 없음'}
+        **세력 평판:**
+        ${repDescriptions || '알려진 평판 없음'}
         **캐릭터 상태:** HP ${character.hp}/${character.maxHp}, MP ${character.mp}/${character.maxMp}, 소지품: ${character.inventory.map(i => i.name).join(', ') || '없음'}, 소지금: ${character.gold} G
         **보유 스킬:** ${character.skills.map(s => s.name).join(', ') || '없음'}
         
         ---
+        ※ NPC의 호감도나 세력 평판에 따라, NPC의 대사가 달라질 수 있습니다. 호감도가 낮으면 적대적이거나 불친절하게 대하고 높으면 친절하게 대하세요.
         **이전 대화 기록:**
         ${JSON.stringify(history)}
         `;

@@ -1,7 +1,7 @@
 import React from 'react';
 import Markdown from 'react-markdown';
 import { StoryLogEntry, StoryPartType, AiScenePart, ContentBlock, Character, Npc } from '../types';
-import { Dices } from "lucide-react";
+import { Dices, Coins, ShieldPlus, Heart, Zap, ArrowUpCircle, AlertCircle, ShoppingBag, Swords, Book } from "lucide-react";
 import { motion, AnimatePresence } from 'motion/react';
 
 interface StoryLogProps {
@@ -18,20 +18,75 @@ const getCharacterData = (name: string, character: Character | null, npcs: Recor
   return { imageUrl: npc?.imageUrl || '', isPlayer: false };
 };
 
+const SystemMessageItem: React.FC<{ text: string }> = ({ text }) => {
+    // Parse the message to determine its type and add icon/color
+    let icon = <Dices className="w-3 h-3 shrink-0" />;
+    let textColor = "text-gray-400";
+    let bgPulse = "";
+
+    if (text.includes("아이템 획득") || text.includes("새로운 아이템")) {
+        icon = <ShoppingBag className="w-3 h-3 shrink-0 text-yellow-300" />;
+        textColor = "text-yellow-200";
+        bgPulse = "bg-yellow-900/20 border-yellow-500/20";
+    } else if (text.includes("경험치 획득") || text.includes("XP") || text.includes("레벨 업")) {
+        icon = <ArrowUpCircle className="w-3 h-3 shrink-0 text-cyan-300" />;
+        textColor = "text-cyan-200 font-bold";
+        bgPulse = "bg-cyan-900/20 border-cyan-500/20";
+    } else if (text.includes("골드 변경") || text.includes("골드")) {
+        icon = <Coins className="w-3 h-3 shrink-0 text-yellow-400" />;
+        textColor = "text-yellow-400";
+    } else if (text.includes("체력 변경") || text.includes("회복") || text.includes("피해")) {
+        if (text.includes("피해") || text.includes("-")) {
+            icon = <Heart className="w-3 h-3 shrink-0 text-red-500" />;
+            textColor = "text-red-400";
+            bgPulse = "bg-red-900/20 border-red-500/20";
+        } else {
+            icon = <Heart className="w-3 h-3 shrink-0 text-green-500" />;
+            textColor = "text-green-400";
+            bgPulse = "bg-green-900/20 border-green-500/20";
+        }
+    } else if (text.includes("상태 효과") || text.includes("상태 이상")) {
+        icon = <AlertCircle className="w-3 h-3 shrink-0 text-purple-400" />;
+        textColor = "text-purple-300";
+    } else if (text.includes("전투 시작") || text.includes("전투 종료")) {
+        icon = <Swords className="w-3 h-3 shrink-0 text-red-400" />;
+        textColor = "text-red-300 font-bold tracking-widest";
+    } else if (text.includes("평판")) {
+        icon = <ShieldPlus className="w-3 h-3 shrink-0 text-blue-400" />;
+        textColor = "text-blue-300 font-bold";
+        bgPulse = "bg-blue-900/20 border-blue-500/20";
+    } else if (text.includes("스킬 습득")) {
+        icon = <Book className="w-3 h-3 shrink-0 text-purple-400" />;
+        textColor = "text-purple-300 font-bold";
+        bgPulse = "bg-purple-900/20 border-purple-500/20";
+    }
+
+    return (
+        <div className={`flex items-center gap-2 p-1.5 rounded bg-gray-900/40 border border-transparent ${bgPulse}`}>
+            <div className="bg-gray-800/80 p-1 rounded border border-white/5 opacity-80 shadow-inner">
+                {icon}
+            </div>
+            <p className={`text-[10px] md:text-[11px] font-sans leading-tight tracking-wide flex-1 ${textColor}`}>
+                {text}
+            </p>
+        </div>
+    );
+};
+
 const SystemMessageGroupComponent: React.FC<{ messages: string[] }> = ({ messages }) => (
     <motion.div 
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         className="flex justify-center my-1"
     >
-        <div className="w-full max-w-2xl bg-bg-card/10 backdrop-blur-sm border border-primary/5 py-1.5 px-3 shadow-lg relative group rounded-lg">
-            <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-primary/5 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
-            <div className="absolute -top-2.5 left-4 bg-bg-deep px-2 py-0.5 rounded-full border border-primary/20 z-10">
-                <h4 className="font-adventure text-[8px] text-primary/60 flex items-center gap-1.5 uppercase tracking-[0.2em] text-glow"><Dices className="w-2.5 h-2.5" /> System Log</h4>
+        <div className="w-full max-w-2xl bg-bg-card/30 backdrop-blur-sm border border-primary/10 py-3 px-3 shadow-lg relative group rounded-xl">
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none rounded-xl" />
+            <div className="absolute -top-2.5 left-4 bg-bg-deep px-2.5 py-0.5 rounded-full border border-primary/20 z-10 shadow-sm shadow-primary/10">
+                <h4 className="font-sans font-bold text-[9px] text-primary/70 flex items-center gap-1.5 uppercase tracking-[0.1em]"><Dices className="w-3 h-3" /> 시스템 로그</h4>
             </div>
-            <div className="space-y-0.5 mt-0.5">
+            <div className="space-y-1 mt-1">
                 {messages.map((text, idx) => (
-                    <p key={idx} className="text-gray-500 text-left italic text-[10px] md:text-xs font-serif leading-tight tracking-tight opacity-70">{text}</p>
+                    <SystemMessageItem key={idx} text={text} />
                 ))}
             </div>
         </div>
@@ -114,31 +169,34 @@ const DialogueBlockComponent: React.FC<{ block: ContentBlock; character: Charact
 
   const { imageUrl, isPlayer } = getCharacterData(block.characterName, character, npcs);
   const alignment = isPlayer ? 'justify-end' : 'justify-start';
-  const bubbleColor = isPlayer ? 'bg-accent/10 border-accent/20' : 'bg-white/5 border-white/10';
+  const bubbleColor = isPlayer ? 'bg-accent/15 border-accent/30 bg-gradient-to-bl from-accent/10 to-transparent shadow-[0_0_15px_rgba(14,165,233,0.15)]' : 'bg-black/60 border-primary/30 bg-gradient-to-br from-primary/10 to-transparent shadow-[0_0_15px_rgba(212,175,55,0.1)]';
   const nameColor = isPlayer ? 'text-accent' : 'text-primary';
   const flexDirection = isPlayer ? 'flex-row-reverse' : 'flex-row';
 
   return (
     <motion.div 
-        initial={{ opacity: 0, x: isPlayer ? 30 : -30 }}
-        animate={{ opacity: 1, x: 0 }}
-        className={`flex items-start gap-1.5 w-full ${alignment} my-1 group`}
+        initial={{ opacity: 0, y: 10 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        className={`flex items-start w-full ${alignment} my-2 group`}
     >
-      <div className={`flex items-start gap-1.5 max-w-[85%] ${flexDirection}`}>
-        <div className="relative flex-shrink-0">
+      <div className={`flex items-start gap-2.5 max-w-[85%] ${flexDirection}`}>
+        <div className="relative flex-shrink-0 mt-1">
+            <div className="absolute -inset-1 bg-primary/20 rounded-xl blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
             {imageUrl ? (
-                <img src={imageUrl} alt={block.characterName} className="w-6 h-6 rounded object-cover border border-white/10 shadow-lg group-hover:scale-105 transition-transform duration-300" />
+                <img src={imageUrl} alt={block.characterName} className="w-8 h-8 md:w-10 md:h-10 rounded-xl object-cover border border-white/10 shadow-lg relative z-10 transition-transform duration-300 group-hover:scale-105" />
             ) : (
-                <div className="w-6 h-6 rounded bg-gray-800 flex items-center justify-center text-gray-400 font-bold border border-white/10 text-[9px]">
+                <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-bg-card flex items-center justify-center text-gray-500 font-adventure border border-white/10 text-sm md:text-base relative z-10 transition-transform duration-300 group-hover:scale-105 shadow-inner">
                     {block.characterName.substring(0, 1)}
                 </div>
             )}
-            {isPlayer && <div className="absolute -top-0.5 -right-0.5 bg-accent w-1.5 h-1.5 rounded-full border border-bg-deep" />}
+            <div className={`absolute -bottom-0.5 ${isPlayer ? '-left-0.5' : '-right-0.5'} w-2.5 h-2.5 rounded-full border border-bg-deep z-20 ${isPlayer ? 'bg-accent' : 'bg-primary'}`} />
         </div>
-        <div className={`relative rounded-lg p-2 shadow-2xl border backdrop-blur-sm ${bubbleColor}`}>
-          <h3 className={`font-adventure text-[8px] mb-0.5 uppercase tracking-[0.2em] opacity-90 ${nameColor} text-glow`}>{block.characterName}</h3>
-          <p className="text-gray-100 text-xs md:text-sm leading-relaxed font-sans">{block.dialogue}</p>
-          <div className={`absolute top-3 ${isPlayer ? '-right-1' : '-left-1'} w-1.5 h-1.5 ${bubbleColor} border-t border-l rotate-45`} />
+        <div className={`relative rounded-xl md:rounded-2xl p-2.5 md:p-3.5 shadow-md border backdrop-blur-md transition-all duration-300 ${bubbleColor} hover:shadow-lg hover:border-opacity-40`}>
+          <div className={`flex items-center gap-1.5 mb-1.5 ${isPlayer ? 'justify-end' : 'justify-start'}`}>
+            <h3 className={`font-sans font-bold text-[9px] md:text-[10px] uppercase tracking-[0.1em] opacity-80 ${nameColor} drop-shadow-md`}>{block.characterName}</h3>
+          </div>
+          <p className="text-gray-200 text-xs md:text-sm leading-relaxed font-serif italic drop-shadow-sm opacity-95">"{block.dialogue}"</p>
         </div>
       </div>
     </motion.div>
@@ -147,43 +205,21 @@ const DialogueBlockComponent: React.FC<{ block: ContentBlock; character: Charact
 
 const AiSceneDisplay: React.FC<{ part: AiScenePart, character: Character | null, npcs: Record<string, Npc> }> = ({ part, character, npcs }) => {
   return (
-    <div className="my-2 pt-0.5">
-      <motion.div 
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="text-center relative mb-2"
-      >
-        <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-gradient-to-r from-transparent via-primary/10 to-transparent" />
-        <h2 className="relative inline-block px-3 bg-bg-deep text-sm md:text-base font-bold text-primary font-adventure tracking-[0.1em] text-glow uppercase">
-          {part.sceneTitle}
-        </h2>
-      </motion.div>
+    <div className="my-3 pl-2 border-l-2 border-primary/30 relative">
+      <div className="absolute -left-1 top-0 w-2 h-2 rounded-full bg-primary/80 shadow-[0_0_8px_rgba(212,175,55,0.8)]" />
+      <h2 className="text-xs md:text-sm font-bold text-primary tracking-widest uppercase mb-1">
+        {part.sceneTitle}
+      </h2>
 
-      {/* Image Display */}
-      {part.isGeneratingImage ? (
-        <div className="w-full h-48 md:h-64 bg-bg-card/50 border border-white/5 rounded-xl flex flex-col items-center justify-center mb-4 animate-pulse">
-          <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin mb-2" />
-          <p className="text-[10px] text-primary/50 uppercase tracking-widest font-adventure">Visualizing Scene...</p>
-        </div>
-      ) : part.imageUrl ? (
-        <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="w-full mb-4 rounded-xl overflow-hidden border border-white/10 shadow-2xl relative group"
-        >
-          <img src={part.imageUrl} alt={part.sceneTitle} className="w-full h-auto max-h-[400px] object-cover transition-transform duration-700 group-hover:scale-105" />
-          <div className="absolute inset-0 bg-gradient-to-t from-bg-deep/80 via-transparent to-transparent opacity-60" />
-        </motion.div>
-      ) : null}
-      
-      {part.contentBlocks && part.contentBlocks.length > 0 ? (
-        <div className="space-y-2">
+      {part.contentBlocks && part.contentBlocks.length > 0 && (
+        <div className="space-y-1.5 mt-2">
           {part.contentBlocks.map((block, idx) => {
             switch (block.type) {
               case 'narration':
-                return <NarrationBlockComponent key={idx} block={block} />;
+                // Instead of a full block, don't show narration in the action log, or just a tiny snippet
+                return null; 
               case 'dialogue':
-                return <DialogueBlockComponent key={idx} block={block} character={character} npcs={npcs} />;
+                return null; // Dialogue is exclusively in DialogueTab now
               case 'action':
                 return <ActionBlockComponent key={idx} block={block} />;
               default:
@@ -191,14 +227,6 @@ const AiSceneDisplay: React.FC<{ part: AiScenePart, character: Character | null,
             }
           })}
         </div>
-      ) : (
-        <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="markdown-body text-gray-300 leading-relaxed space-y-4 text-sm md:text-base"
-        >
-          <Markdown>{part.text || ''}</Markdown>
-        </motion.div>
       )}
     </div>
   );

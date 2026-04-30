@@ -20,7 +20,7 @@ interface GameContextType {
     handleCharacterCreate: (character: Character, useImageGeneration: boolean, imageModel: ImageModel) => Promise<void>;
     handleContinueToGame: () => void;
     handleExecuteSpecialAction: (action: SpecialAction) => void;
-    handleRollSkillCheck: () => void;
+    handleRollSkillCheck: (outcomeMessage: string, d20Roll: number, modifier: number, total: number, outcome: string) => void;
     handleRestartFromDefeat: () => void;
     handleGenerateVideo: (storyPartId: string, prompt: string, imageUrl: string) => Promise<void>;
     handleRetry: () => void;

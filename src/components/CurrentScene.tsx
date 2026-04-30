@@ -1,16 +1,107 @@
 import React from 'react';
 import Markdown from 'react-markdown';
-import { AiScenePart, Character, Npc, ContentBlock } from '../types';
+import { AiScenePart, Character, Npc, ContentBlock, StoryLogEntry, StoryPartType } from '../types';
 import { motion } from 'motion/react';
 import { useGame } from '../contexts/GameContext';
-import { Film } from 'lucide-react';
+import { Film, Dices, ShoppingBag, ArrowUpCircle, Coins, Heart, AlertCircle, Swords, ShieldPlus, Book } from 'lucide-react';
 
 interface CurrentSceneProps {
   part: AiScenePart;
+  subsequentLogs?: StoryLogEntry[];
   character: Character | null;
   npcs: Record<string, Npc>;
   useImageGeneration: boolean;
 }
+
+const SystemMessageItem: React.FC<{ text: string }> = ({ text }) => {
+    let icon = <Dices className="w-3.5 h-3.5 shrink-0" />;
+    let textColor = "text-gray-400";
+    let bgPulse = "";
+
+    if (text.includes("아이템 획득") || text.includes("새로운 아이템")) {
+        icon = <ShoppingBag className="w-3.5 h-3.5 shrink-0 text-yellow-300" />;
+        textColor = "text-yellow-200";
+        bgPulse = "bg-yellow-900/20 border-yellow-500/20";
+    } else if (text.includes("경험치 획득") || text.includes("XP") || text.includes("레벨 업")) {
+        icon = <ArrowUpCircle className="w-3.5 h-3.5 shrink-0 text-cyan-300" />;
+        textColor = "text-cyan-200 font-bold";
+        bgPulse = "bg-cyan-900/20 border-cyan-500/20";
+    } else if (text.includes("골드 변경") || text.includes("골드")) {
+        icon = <Coins className="w-3.5 h-3.5 shrink-0 text-yellow-400" />;
+        textColor = "text-yellow-400";
+    } else if (text.includes("체력 변경") || text.includes("회복") || text.includes("피해")) {
+        if (text.includes("피해") || text.includes("-")) {
+            icon = <Heart className="w-3.5 h-3.5 shrink-0 text-red-500" />;
+            textColor = "text-red-400";
+            bgPulse = "bg-red-900/20 border-red-500/20";
+        } else {
+            icon = <Heart className="w-3.5 h-3.5 shrink-0 text-green-500" />;
+            textColor = "text-green-400";
+            bgPulse = "bg-green-900/20 border-green-500/20";
+        }
+    } else if (text.includes("상태 효과") || text.includes("상태 이상")) {
+        icon = <AlertCircle className="w-3.5 h-3.5 shrink-0 text-purple-400" />;
+        textColor = "text-purple-300";
+    } else if (text.includes("전투 시작") || text.includes("전투 종료")) {
+        icon = <Swords className="w-3.5 h-3.5 shrink-0 text-red-400" />;
+        textColor = "text-red-300 font-bold tracking-widest";
+    } else if (text.includes("평판")) {
+        icon = <ShieldPlus className="w-3.5 h-3.5 shrink-0 text-blue-400" />;
+        textColor = "text-blue-300 font-bold";
+        bgPulse = "bg-blue-900/20 border-blue-500/20";
+    } else if (text.includes("스킬 습득")) {
+        icon = <Book className="w-3.5 h-3.5 shrink-0 text-purple-400" />;
+        textColor = "text-purple-300 font-bold";
+        bgPulse = "bg-purple-900/20 border-purple-500/20";
+    }
+
+    return (
+        <div className={`flex items-center gap-3 p-2 rounded-lg bg-gray-900/40 border border-transparent shadow-sm ${bgPulse}`}>
+            <div className="bg-gray-800 p-1.5 rounded-md border border-white/5 opacity-90 shadow-inner">
+                {icon}
+            </div>
+            <p className={`text-xs md:text-sm font-sans tracking-wide flex-1 ${textColor}`}>
+                {text}
+            </p>
+        </div>
+    );
+};
+
+const SystemMessageGroupComponent: React.FC<{ messages: string[] }> = ({ messages }) => (
+    <motion.div 
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex justify-center my-6"
+    >
+        <div className="w-full max-w-3xl bg-bg-card/40 backdrop-blur-md border border-primary/20 py-4 px-5 shadow-lg relative rounded-2xl">
+            <div className="absolute -top-3 left-6 bg-bg-deep px-3 py-0.5 rounded-full border border-primary/30 z-10 shadow-sm">
+                <h4 className="font-sans font-bold text-[10px] md:text-xs text-primary flex items-center gap-2 uppercase tracking-[0.1em]"><Dices className="w-3 h-3 md:w-3.5 md:h-3.5" /> 게임 시스템</h4>
+            </div>
+            <div className="space-y-2 mt-2">
+                {messages.map((text, idx) => (
+                    <SystemMessageItem key={idx} text={text} />
+                ))}
+            </div>
+        </div>
+    </motion.div>
+);
+
+const UserActionDisplay: React.FC<{ text: string }> = ({ text }) => {
+  return (
+    <motion.div 
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        className="flex justify-end my-6 w-full"
+    >
+        <div className="max-w-[85%] md:max-w-[70%]">
+            <div className="px-5 py-3 text-[15px] md:text-[17px] text-accent bg-accent/10 border border-accent/20 rounded-2xl rounded-tr-sm italic text-right shadow-lg backdrop-blur-md relative group">
+                <span className="block text-[9px] uppercase tracking-[0.2em] mb-1.5 opacity-60 not-italic font-bold font-sans">내 행동</span>
+                {text}
+            </div>
+        </div>
+    </motion.div>
+  );
+};
 
 const getCharacterData = (name: string, character: Character | null, npcs: Record<string, Npc>): { imageUrl: string; isPlayer: boolean } => {
   if (character && character.name === name) {
@@ -25,45 +116,46 @@ const DialogueBlockComponent: React.FC<{ block: ContentBlock; character: Charact
 
   const { imageUrl, isPlayer } = getCharacterData(block.characterName, character, npcs);
   const alignment = isPlayer ? 'justify-end' : 'justify-start';
-  const bubbleColor = isPlayer ? 'bg-accent/5 border-accent/20' : 'bg-primary/5 border-primary/20';
+  const bubbleColor = isPlayer ? 'bg-accent/15 border-accent/30 bg-gradient-to-bl from-accent/10 to-transparent shadow-[0_0_15px_rgba(14,165,233,0.15)]' : 'bg-black/60 border-primary/30 bg-gradient-to-br from-primary/10 to-transparent shadow-[0_0_15px_rgba(212,175,55,0.1)]';
   const nameColor = isPlayer ? 'text-accent' : 'text-primary';
   const flexDirection = isPlayer ? 'flex-row-reverse' : 'flex-row';
 
   return (
     <motion.div 
-        initial={{ opacity: 0, y: 10 }}
+        initial={{ opacity: 0, y: 15 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
-        className={`flex items-start gap-4 w-full ${alignment} my-6`}
+        transition={{ duration: 0.4, ease: "easeOut" }}
+        className={`flex items-start w-full ${alignment} my-8 group`}
     >
-      <div className={`flex items-start gap-4 max-w-[90%] ${flexDirection}`}>
+      <div className={`flex items-start gap-3 md:gap-5 max-w-[95%] md:max-w-[85%] ${flexDirection}`}>
         {useImageGeneration && (
-          <div className="relative flex-shrink-0 mt-1">
-              <div className="absolute -inset-1 bg-primary/20 rounded-2xl blur-sm opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="relative flex-shrink-0 mt-2">
+              <div className="absolute -inset-1.5 bg-primary/20 rounded-2xl blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
               {imageUrl ? (
-                  <img src={imageUrl} alt={block.characterName} className="w-14 h-14 md:w-20 md:h-20 rounded-2xl object-cover border border-white/10 shadow-2xl relative z-10" />
+                  <img src={imageUrl} alt={block.characterName} className="w-12 h-12 md:w-16 md:h-16 rounded-2xl object-cover border border-white/10 shadow-xl relative z-10 transition-transform duration-300 group-hover:scale-105" />
               ) : (
-                  <div className="w-14 h-14 md:w-20 md:h-20 rounded-2xl bg-bg-card flex items-center justify-center text-gray-500 font-adventure border border-white/10 text-xl relative z-10">
+                  <div className="w-12 h-12 md:w-16 md:h-16 rounded-2xl bg-bg-card flex items-center justify-center text-gray-500 font-adventure border border-white/10 text-xl md:text-2xl relative z-10 transition-transform duration-300 group-hover:scale-105 shadow-inner">
                       {block.characterName.substring(0, 1)}
                   </div>
               )}
-              <div className={`absolute -bottom-1 ${isPlayer ? '-left-1' : '-right-1'} w-4 h-4 rounded-full border-2 border-bg-deep z-20 ${isPlayer ? 'bg-accent shadow-[0_0_10px_rgba(14,165,233,0.5)]' : 'bg-primary shadow-[0_0_10px_rgba(212,175,55,0.5)]'}`} />
+              <div className={`absolute -bottom-1 ${isPlayer ? '-left-1' : '-right-1'} w-3.5 h-3.5 md:w-4 md:h-4 rounded-full border-2 border-bg-deep z-20 ${isPlayer ? 'bg-accent shadow-[0_0_10px_rgba(14,165,233,0.6)]' : 'bg-primary shadow-[0_0_10px_rgba(212,175,55,0.6)]'}`} />
           </div>
         )}
-        <div className={`relative rounded-3xl p-5 shadow-[0_10px_30px_rgba(0,0,0,0.3)] border backdrop-blur-md ${bubbleColor}`}>
-          <div className={`flex items-center gap-2 mb-2 ${isPlayer ? 'justify-end' : 'justify-start'}`}>
-            {!isPlayer && <span className="w-1.5 h-1.5 rounded-full bg-primary/50" />}
-            <h3 className={`font-adventure text-[10px] uppercase tracking-[0.3em] opacity-80 ${nameColor} text-glow`}>{block.characterName}</h3>
-            {isPlayer && <span className="w-1.5 h-1.5 rounded-full bg-accent/50" />}
+        <div className={`relative rounded-2xl md:rounded-3xl p-4 md:p-6 shadow-xl border backdrop-blur-md transition-all duration-300 ${bubbleColor} hover:shadow-2xl hover:border-opacity-40`}>
+          <div className={`flex items-center gap-2.5 mb-3 ${isPlayer ? 'justify-end' : 'justify-start'}`}>
+            {!isPlayer && <span className="w-1.5 h-1.5 rounded-full bg-primary/60 blur-[1px]" />}
+            <h3 className={`font-sans font-bold text-[11px] md:text-xs uppercase tracking-[0.2em] opacity-90 ${nameColor} drop-shadow-md`}>{block.characterName}</h3>
+            {isPlayer && <span className="w-1.5 h-1.5 rounded-full bg-accent/60 blur-[1px]" />}
           </div>
-          <p className="text-gray-100 text-base md:text-lg leading-relaxed font-serif italic opacity-90">"{block.dialogue}"</p>
+          <p className="text-gray-200 text-[15px] md:text-[17px] leading-relaxed font-serif italic drop-shadow-sm opacity-95">"{block.dialogue}"</p>
         </div>
       </div>
     </motion.div>
   );
 };
 
-const CurrentScene: React.FC<CurrentSceneProps> = ({ part, character, npcs, useImageGeneration }) => {
+const CurrentScene: React.FC<CurrentSceneProps> = ({ part, subsequentLogs, character, npcs, useImageGeneration }) => {
   const { actions } = useGame();
 
   return (
@@ -163,6 +255,28 @@ const CurrentScene: React.FC<CurrentSceneProps> = ({ part, character, npcs, useI
           </motion.div>
         )}
       </div>
+
+      {/* Subsequent Logs (User Actions & System Messages since this scene) */}
+      {subsequentLogs && subsequentLogs.length > 0 && (
+        <div className="mt-8 pt-6 border-t border-white/5 space-y-4">
+            {subsequentLogs.map((log) => {
+               if (log.type === StoryPartType.USER) {
+                   return <UserActionDisplay key={log.id} text={log.text} />;
+               }
+               if (log.type === StoryPartType.SYSTEM_MESSAGE) {
+                   // For simplicity in CurrentScene, we can just wrap single system messages or we could group them.
+                   // Actually grouping them is better visually, but for now rendering each is fine. Let's group them later or just use the group component for each.
+                   return <SystemMessageGroupComponent key={log.id} messages={[log.text]} />;
+               }
+               // We might also have short AI actions or dialogues here if the AI didn't spawn a full scene
+               if (log.type === StoryPartType.AI_SCENE) {
+                  // Fallback if there's somehow another AI Scene (though slicing from the last one makes this impossible)
+                  return null;
+               }
+               return null;
+            })}
+        </div>
+      )}
     </div>
   );
 };

@@ -92,7 +92,9 @@ const sceneResponseSchema = {
             type: Type.OBJECT, nullable: true,
             properties: {
                 ability: { type: Type.STRING },
-                difficulty: { type: Type.INTEGER }
+                difficulty: { type: Type.INTEGER },
+                successOutcome: { type: Type.STRING, description: "판정 성공 시 예상되는 결과 요약" },
+                failureOutcome: { type: Type.STRING, description: "판정 실패 시 예상되는 결과나 위험 요약" }
             },
         },
         xpGained: { type: Type.INTEGER, nullable: true },

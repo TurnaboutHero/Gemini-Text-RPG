@@ -76,7 +76,6 @@ const CharacterCreator: React.FC<CharacterCreatorProps> = ({ onCharacterCreate, 
     const newInventory: Item[] = equipmentData.map(itemData => ({
       ...itemData,
       id: crypto.randomUUID(),
-      description: '시작 장비입니다.',
     }));
     setStartingInventory(newInventory);
   }, [character.class, character.background]);

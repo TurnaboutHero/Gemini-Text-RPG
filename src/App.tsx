@@ -85,20 +85,28 @@ const App: React.FC = () => {
   useEffect(() => {
     const scrollToBottom = () => {
       if (activeTab === 'dialogue') {
-        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
       }
       if (mainScrollRef.current) {
-        mainScrollRef.current.scrollTop = mainScrollRef.current.scrollHeight;
+        mainScrollRef.current.scrollTo({
+          top: mainScrollRef.current.scrollHeight,
+          behavior: 'smooth'
+        });
       }
     };
 
-    const timeoutId = setTimeout(scrollToBottom, 100);
+    const timeoutId = setTimeout(scrollToBottom, 150);
+    // Add another delayed scroll to handle image rendering
+    const longTimeoutId = setTimeout(scrollToBottom, 600);
     
     if (gameState.gamePhase === 'start_menu') {
       setSavedGameExists(!!localStorage.getItem(LOCAL_STORAGE_KEY));
     }
 
-    return () => clearTimeout(timeoutId);
+    return () => {
+      clearTimeout(timeoutId);
+      clearTimeout(longTimeoutId);
+    };
   }, [gameState.storyLog, activeTab, gameState.gamePhase]);
 
   const isActionDisabled = () => {
@@ -107,7 +115,9 @@ const App: React.FC = () => {
     return lastPart?.type === StoryPartType.AI_SCENE && lastPart.isGeneratingImage;
   };
 
-  const latestAiScene = [...gameState.storyLog].reverse().find(p => p.type === StoryPartType.AI_SCENE) as AiScenePart | undefined;
+  const latestAiSceneIndex = gameState.storyLog.map(p => p.type).lastIndexOf(StoryPartType.AI_SCENE);
+  const latestAiScene = latestAiSceneIndex >= 0 ? gameState.storyLog[latestAiSceneIndex] as AiScenePart : undefined;
+  const subsequentLogs = latestAiSceneIndex >= 0 ? gameState.storyLog.slice(latestAiSceneIndex + 1) : gameState.storyLog;
 
   const currentLocationName = React.useMemo(() => {
     if (gameState.currentLocationId && gameState.worldMap) {
@@ -181,7 +191,7 @@ const App: React.FC = () => {
 
       <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
         {/* Main Panel (Left) - Story & Actions */}
-        <main className="flex-1 flex flex-col border-b lg:border-b-0 lg:border-r border-primary/10 bg-grid-pattern relative overflow-hidden">
+        <main className="flex-1 flex flex-col m-0 lg:m-4 lg:mr-2 lg:rounded-2xl border border-primary/20 lg:shadow-2xl bg-bg-deep/90 bg-grid-pattern backdrop-blur-md relative overflow-hidden">
           <AnimatePresence mode="wait">
             <motion.div
               key={gameState.gamePhase}
@@ -208,6 +218,7 @@ const App: React.FC = () => {
                       {latestAiScene ? (
                         <CurrentScene 
                           part={latestAiScene} 
+                          subsequentLogs={subsequentLogs}
                           character={gameState.character} 
                           npcs={gameState.npcs} 
                           useImageGeneration={gameState.useImageGeneration}
@@ -228,7 +239,7 @@ const App: React.FC = () => {
                         <p className="text-[10px] font-adventure text-primary/60 animate-pulse tracking-[0.4em] uppercase">구상 중...</p>
                       </div>
                     ) : gameState.currentSkillCheck ? (
-                      <SkillCheckPrompt skillCheck={gameState.currentSkillCheck} onRoll={handleRollSkillCheck} />
+                      <SkillCheckPrompt skillCheck={gameState.currentSkillCheck} character={gameState.character} onComplete={handleRollSkillCheck} />
                     ) : (
                       <div className="max-w-4xl mx-auto space-y-5">
                         <SuggestedActions actions={gameState.suggestedActions} onActionSelect={handleSendAction} disabled={isActionDisabled()} />
@@ -246,28 +257,28 @@ const App: React.FC = () => {
         </main>
 
         {/* Side Panel (Right) - History & Data */}
-        <aside className="flex w-full lg:w-[450px] h-1/3 lg:h-auto flex-col bg-bg-card/20 backdrop-blur-3xl border-t lg:border-t-0 lg:border-l border-white/5 overflow-hidden shrink-0 shadow-2xl z-10">
-          <div className="flex border-b border-white/5 bg-bg-deep/20 p-1 gap-1">
+        <aside className="flex w-full lg:w-[450px] h-[35vh] lg:h-auto flex-col bg-bg-card/20 backdrop-blur-xl lg:m-4 lg:ml-2 lg:rounded-2xl border-t lg:border border-white/5 overflow-hidden shrink-0 shadow-[0_0_40px_rgba(0,0,0,0.5)] z-10 transition-all duration-300">
+          <div className="flex border-b border-white/5 bg-bg-deep/60 p-2 gap-1 px-2 md:px-3 shadow-sm">
             {[
-              { id: 'dialogue', label: '대화', icon: <MessageSquare className="w-4 h-4" /> },
-              { id: 'log', label: '로그', icon: <History className="w-4 h-4" /> },
-              { id: 'quest', label: '퀘스트', icon: <ScrollText className="w-4 h-4" /> },
-              { id: 'items', label: '아이템', icon: <ShoppingBag className="w-4 h-4" /> },
-              { id: 'profile', label: '프로필', icon: <User className="w-4 h-4" /> }
+              { id: 'dialogue', label: '대화', icon: <MessageSquare className="w-5 h-5" /> },
+              { id: 'log', label: '로그', icon: <History className="w-5 h-5" /> },
+              { id: 'quest', label: '퀘스트', icon: <ScrollText className="w-5 h-5" /> },
+              { id: 'items', label: '아이템', icon: <ShoppingBag className="w-5 h-5" /> },
+              { id: 'profile', label: '프로필', icon: <User className="w-5 h-5" /> }
             ].map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`flex-1 flex flex-col items-center justify-center py-2.5 rounded-xl transition-all relative group ${activeTab === tab.id ? 'bg-primary/10 text-primary shadow-inner' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}
+                className={`flex-1 flex flex-col items-center justify-center py-3 rounded-lg transition-all relative group ${activeTab === tab.id ? 'bg-primary/10 text-primary shadow-inner' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}`}
               >
-                <div className={`transition-transform duration-300 ${activeTab === tab.id ? 'scale-110' : 'group-hover:scale-105'}`}>
+                <div className={`transition-transform duration-300 ${activeTab === tab.id ? 'scale-110 drop-shadow-[0_0_8px_rgba(212,175,55,0.5)]' : 'group-hover:scale-110'}`}>
                   {tab.icon}
                 </div>
-                <span className="text-[8px] font-bold uppercase tracking-widest mt-1 opacity-60 group-hover:opacity-100 transition-opacity">{tab.label}</span>
+                <span className={`text-[9px] font-bold uppercase tracking-widest mt-1.5 transition-opacity ${activeTab === tab.id ? 'opacity-100 font-bold' : 'opacity-70 group-hover:opacity-100'}`}>{tab.label}</span>
                 {activeTab === tab.id && (
                   <motion.div 
-                    layoutId="activeTabGlow" 
-                    className="absolute inset-0 rounded-xl border border-primary/30 pointer-events-none"
+                    layoutId="activeTabIndicator" 
+                    className="absolute inset-0 rounded-lg border border-primary/20 pointer-events-none"
                     initial={false}
                     transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
                   />
@@ -276,12 +287,15 @@ const App: React.FC = () => {
             ))}
           </div>
 
-          <div className="flex-1 overflow-y-auto p-5 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent bg-gradient-to-b from-transparent to-bg-deep/20">
-            {activeTab === 'dialogue' && <DialogueTab gameState={gameState} chatEndRef={chatEndRef} />}
-            {activeTab === 'log' && <LogTab gameState={gameState} />}
-            {activeTab === 'quest' && <QuestTab gameState={gameState} />}
-            {activeTab === 'items' && <InventoryTab gameState={gameState} onEquipItem={handleEquipItem} onUnequipItem={handleUnequipItem} onUseItem={handleUseItem} />}
-            {activeTab === 'profile' && <ProfileTab gameState={gameState} onOpenCharacterSheet={() => setIsCharacterSheetOpen(true)} />}
+          <div className="flex-1 overflow-y-auto p-4 md:p-6 scrollbar-thin scrollbar-thumb-gray-700/50 scrollbar-track-transparent bg-gradient-to-b from-bg-card/10 to-bg-deep/40 relative">
+            <div className="absolute inset-0 bg-grid-pattern opacity-10 pointer-events-none" />
+            <div className="relative z-10 w-full h-full">
+              {activeTab === 'dialogue' && <DialogueTab gameState={gameState} chatEndRef={chatEndRef} />}
+              {activeTab === 'log' && <LogTab gameState={gameState} />}
+              {activeTab === 'quest' && <QuestTab gameState={gameState} />}
+              {activeTab === 'items' && <InventoryTab gameState={gameState} onEquipItem={handleEquipItem} onUnequipItem={handleUnequipItem} onUseItem={handleUseItem} />}
+              {activeTab === 'profile' && <ProfileTab gameState={gameState} onOpenCharacterSheet={() => setIsCharacterSheetOpen(true)} />}
+            </div>
           </div>
         </aside>
       </div>

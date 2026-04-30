@@ -373,18 +373,15 @@ export const useGameActions = (
     handleAction(perform);
   };
 
-  const handleRollSkillCheck = () => {
+  const handleRollSkillCheck = (outcomeMessage: string, d20Roll: number, modifier: number, total: number, outcome: string) => {
     if (!gameState.character || !gameState.currentSkillCheck) return;
     const { ability, difficulty } = gameState.currentSkillCheck;
-    const score = gameState.character.abilityScores[ability] || 10;
-    const modifier = Math.floor((score - 10) / 2);
-    const d20Roll = Math.floor(Math.random() * 20) + 1;
-    const total = d20Roll + modifier;
+    
     const resultText = `주사위 굴림: ${d20Roll} + ${modifier} (${ability}) = 총 ${total} (난이도: ${difficulty})`;
     const systemMessage: SystemMessagePart = { id: crypto.randomUUID(), type: StoryPartType.SYSTEM_MESSAGE, text: resultText };
     setGameState(prev => ({ ...prev, storyLog: [...prev.storyLog, systemMessage], currentSkillCheck: null }));
-    let outcome = d20Roll === 1 ? '대실패' : d20Roll === 20 ? '대성공' : total >= difficulty ? '성공' : '실패';
-    const outcomeMessage = `판정 결과: '${outcome}'. 내 캐릭터가 ${ability} 판정을 시도했고, 결과는 이러했습니다. 이 결과에 따른 이야기를 계속해주세요. (중요: 판정 결과만으로 갑자기 다른 장소로 이동하지 말고, 현재 장소("${gameState.worldMap?.[gameState.currentLocationId || '']?.name || '알 수 없음'}")에서의 상황 변화를 묘사해주세요.)`;
+    
+    // Send the outcomeMessage automatically as the user's action
     handleSendAction(outcomeMessage);
   };
 

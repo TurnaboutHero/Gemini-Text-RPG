@@ -8,7 +8,7 @@ interface DialogueTabProps {
 }
 
 const DialogueTab: React.FC<DialogueTabProps> = ({ gameState, chatEndRef }) => {
-  const chatItems: { id: string; type: 'dialogue'; text: string; characterName?: string; isPlayer?: boolean; imageUrl?: string }[] = [];
+  const chatItems: { id: string; type: 'dialogue'; text: string; characterName?: string; isPlayer?: boolean; imageUrl?: string; npcFaction?: string; npcAffinity?: number }[] = [];
   
   gameState.storyLog.forEach((entry, idx) => {
     if (entry.type === StoryPartType.AI_SCENE) {
@@ -26,7 +26,9 @@ const DialogueTab: React.FC<DialogueTabProps> = ({ gameState, chatEndRef }) => {
               text: block.dialogue,
               characterName: block.characterName,
               isPlayer,
-              imageUrl
+              imageUrl,
+              npcFaction: (npc as any)?.faction,
+              npcAffinity: (npc as any)?.affinity
             });
           }
         });
@@ -77,11 +79,27 @@ const DialogueTab: React.FC<DialogueTabProps> = ({ gameState, chatEndRef }) => {
                 )}
               </div>
             )}
-            <div className={`p-3 rounded-xl text-xs max-w-[85%] shadow-lg border ${item.isPlayer ? 'bg-primary/10 border-primary/20 text-primary rounded-br-none' : 'bg-white/5 text-gray-200 rounded-bl-none border-white/5'}`}>
+            <div className={`p-3 rounded-2xl text-xs w-full max-w-[85%] shadow-lg border ${item.isPlayer ? 'bg-accent/15 border-accent/30 text-accent rounded-br-none bg-gradient-to-bl from-accent/10 to-transparent shadow-[0_0_15px_rgba(14,165,233,0.15)]' : 'bg-black/60 text-gray-200 rounded-bl-none border-primary/30 bg-gradient-to-br from-primary/10 to-transparent shadow-[0_0_15px_rgba(212,175,55,0.1)]'}`}>
               {!item.isPlayer && (
-                <div className="text-[10px] font-bold text-primary/70 mb-1 flex items-center gap-1.5">
-                  <span className="w-1 h-1 rounded-full bg-primary/50" />
-                  {item.characterName}
+                <div className="flex justify-between items-start mb-2">
+                  <div className="text-[10px] font-bold text-primary/70 flex items-center gap-1.5 flex-wrap">
+                    <span className="w-1 h-1 rounded-full bg-primary/50" />
+                    {item.characterName}
+                    {item.npcFaction && <span className="text-gray-500 font-normal">({item.npcFaction})</span>}
+                  </div>
+                  {item.npcAffinity !== undefined && (
+                     <div className="flex flex-col items-end w-16 flex-shrink-0 ml-2">
+                        <span className={`text-[8px] mb-0.5 ${item.npcAffinity > 70 ? 'text-green-400' : item.npcAffinity < 30 ? 'text-red-400' : 'text-primary/80'}`}>
+                           호감도: {item.npcAffinity}
+                        </span>
+                        <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full transition-all duration-500 ${item.npcAffinity > 70 ? 'bg-green-500' : item.npcAffinity < 30 ? 'bg-red-500' : 'bg-primary'}`} 
+                            style={{ width: `${item.npcAffinity}%` }}
+                          />
+                        </div>
+                     </div>
+                  )}
                 </div>
               )}
               {item.isPlayer && (

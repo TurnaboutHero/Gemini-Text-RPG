@@ -48,17 +48,6 @@ const Header: React.FC<HeaderProps> = ({ title, currentTime, currentLocationName
             </div>
 
             <div className="flex items-center gap-3 relative z-10">
-                <div className="hidden lg:flex items-center gap-1 mr-4">
-                    <div className="h-1 w-12 bg-primary/10 rounded-full overflow-hidden">
-                        <motion.div 
-                            className="h-full bg-primary" 
-                            initial={{ width: 0 }}
-                            animate={{ width: '60%' }}
-                            transition={{ duration: 2, repeat: Infinity, repeatType: 'reverse' }}
-                        />
-                    </div>
-                </div>
-
                 <button 
                     onClick={onToggleAudio}
                     className={`h-9 w-9 flex items-center justify-center rounded-xl border transition-all ${!isAudioMuted ? 'bg-primary/10 border-primary/30 text-primary shadow-[0_0_15px_rgba(212,175,55,0.1)]' : 'bg-white/5 border-white/10 text-gray-500 hover:text-gray-300'}`}

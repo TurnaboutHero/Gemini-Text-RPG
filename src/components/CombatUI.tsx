@@ -80,12 +80,13 @@ const CombatUI: React.FC<CombatUIProps> = ({ character, combatState, onCombatAct
             </div>
 
             {/* Combat Log & Player Area */}
-            <div className="flex-shrink-0 grid grid-cols-1 md:grid-cols-2 gap-2 relative z-10">
-                <div className="bg-bg-deep/50 border border-white/5 p-2 rounded-lg h-24 md:h-32 overflow-y-auto scrollbar-hide">
-                    <ul className="text-[10px] font-mono space-y-0.5 text-gray-400">
+            <div className="flex-shrink-0 grid grid-cols-1 md:grid-cols-2 gap-3 relative z-10">
+                <div className="bg-bg-deep/80 border border-white/5 p-3 rounded-xl h-24 md:h-32 overflow-y-auto scrollbar-thin scrollbar-thumb-primary/20 scrollbar-track-transparent shadow-inner relative">
+                    <div className="absolute inset-0 bg-gradient-to-t from-bg-deep via-transparent to-transparent pointer-events-none" />
+                    <ul className="text-[11px] font-mono space-y-1.5 text-gray-300">
                         {combatLog.slice().reverse().map((log, index) => (
-                            <li key={index} className="border-l-2 border-primary/20 pl-1.5 py-0.5 leading-relaxed">
-                                <span className="text-primary/60 mr-1">[{new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}]</span>
+                            <li key={index} className="border-l-2 border-primary/30 pl-2 leading-relaxed opacity-90 hover:opacity-100 transition-opacity">
+                                <span className="text-primary/70 mr-1 opacity-50">[{new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}]</span>
                                 {log}
                             </li>
                         ))}

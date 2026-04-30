@@ -43,6 +43,8 @@ export interface SystemMessagePart {
 export interface SkillCheck {
   ability: Ability;
   difficulty: number;
+  successOutcome?: string;
+  failureOutcome?: string;
 }
 
 // New content block types for structured narrative

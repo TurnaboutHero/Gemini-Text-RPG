@@ -21,6 +21,7 @@ export const getInitialState = (): GameState => {
     currentLocationId: null,
     currentTime: INITIAL_TIME,
     currentDay: INITIAL_DAY,
+    currentWeather: '맑음',
     combatState: null,
     currentShop: null,
     uiEffects: [],

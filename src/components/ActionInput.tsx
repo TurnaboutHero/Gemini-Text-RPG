@@ -50,15 +50,15 @@ const ActionInput: React.FC<ActionInputProps> = ({ onSubmit, onOpenActionMenu, d
   };
 
   return (
-    <div className="w-full flex items-center gap-2 relative z-10">
+    <div className="w-full flex items-center gap-2 sm:gap-3 relative z-10">
       <button
         type="button"
         onClick={handleMenuOpen}
         disabled={disabled}
-        className="flex-shrink-0 w-14 h-14 bg-bg-card border-2 border-primary/20 text-primary rounded-xl flex items-center justify-center hover:bg-primary/10 hover:border-primary/50 focus:outline-none focus:ring-4 focus:ring-primary/10 transition-all duration-300 disabled:opacity-30 disabled:cursor-not-allowed group shadow-[0_0_15px_rgba(0,0,0,0.5)]"
+        className="flex-shrink-0 w-12 h-12 md:w-14 md:h-14 bg-bg-card border-2 border-primary/20 text-primary rounded-xl flex items-center justify-center hover:bg-primary/10 hover:border-primary/50 focus:outline-none focus:ring-4 focus:ring-primary/10 transition-all duration-300 disabled:opacity-30 disabled:cursor-not-allowed group shadow-[0_0_15px_rgba(0,0,0,0.5)]"
         aria-label="특별 행동 메뉴 열기"
       >
-        <Star className="w-6 h-6 group-hover:scale-110 transition-transform" />
+        <Star className="w-5 h-5 md:w-6 md:h-6 group-hover:scale-110 transition-transform" />
       </button>
       <form onSubmit={handleSubmit} className="w-full flex-grow">
         <div className={`relative group/input flex items-center bg-bg-card/80 backdrop-blur-md border-2 rounded-xl transition-all duration-300 ${disabled ? 'opacity-70 bg-bg-card' : 'focus-within:border-primary focus-within:bg-bg-deep focus-within:ring-4 focus-within:ring-primary/20 hover:border-primary/50 border-primary/20'}`}>
@@ -69,13 +69,13 @@ const ActionInput: React.FC<ActionInputProps> = ({ onSubmit, onOpenActionMenu, d
             onKeyDown={handleKeyDown}
             disabled={disabled}
             placeholder={disabled ? "작업 처리 중..." : "다음에 무엇을 할까요? (↑/↓ 키로 최근 행동 불러오기)"}
-            className="flex-grow bg-transparent border-none py-3 pl-5 pr-2 text-white text-[15px] placeholder-gray-500 focus:outline-none focus:ring-0 shadow-inner h-14 font-sans placeholder:font-sans placeholder:italic"
+            className="flex-grow bg-transparent border-none py-2 md:py-3 pl-3 md:pl-5 pr-2 text-white text-[14px] md:text-[15px] placeholder-gray-500 focus:outline-none focus:ring-0 shadow-inner h-12 md:h-14 font-sans placeholder:font-sans placeholder:italic"
           />
-          <div className="pr-1.5 flex-shrink-0">
+          <div className="pr-1 md:pr-1.5 flex-shrink-0">
             <button
               type="submit"
               disabled={disabled || !inputValue.trim()}
-              className="flex items-center justify-center bg-primary text-bg-deep font-bold font-sans tracking-wide rounded-lg px-4 md:px-6 h-11 hover:bg-white hover:scale-[1.02] active:scale-95 transition-all duration-300 disabled:opacity-30 disabled:hover:scale-100 disabled:hover:bg-primary disabled:cursor-not-allowed text-[13px] md:text-sm shadow-[0_0_15px_rgba(212,175,55,0.4)] hover:shadow-[0_0_20px_rgba(255,255,255,0.5)]"
+              className="flex items-center justify-center bg-primary text-bg-deep font-bold font-sans tracking-wide rounded-lg px-3 md:px-6 h-10 md:h-11 hover:bg-white hover:scale-[1.02] active:scale-95 transition-all duration-300 disabled:opacity-30 disabled:hover:scale-100 disabled:hover:bg-primary disabled:cursor-not-allowed text-[12px] md:text-sm shadow-[0_0_15px_rgba(212,175,55,0.4)] hover:shadow-[0_0_20px_rgba(255,255,255,0.5)]"
             >
               {disabled ? <LoadingSpinner /> : '실행'}
             </button>

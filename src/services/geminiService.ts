@@ -102,6 +102,7 @@ const sceneResponseSchema = {
         goldChange: { type: Type.INTEGER, nullable: true },
         playerMovedTo: { type: Type.STRING, nullable: true },
         timeElapsed: { type: Type.INTEGER, nullable: true, description: "이 행동으로 인해 경과된 시간 (시간 단위)." },
+        weatherChange: { type: Type.STRING, nullable: true, enum: ['맑음', '흐림', '비', '눈', '폭풍', '안개'], description: "시간의 흐름이나 마법적 요인으로 인한 날씨의 변화." },
         itemsGained: { type: Type.ARRAY, nullable: true, items: itemSchema },
         itemsLost: { type: Type.ARRAY, nullable: true, items: { type: Type.STRING } },
         statusEffect: {
@@ -371,6 +372,7 @@ export const generateSceneState = async (
     worldMap: WorldMap | null,
     currentTime: number,
     currentDay: number,
+    currentWeather: string,
     chapterSummaries: string[] = [],
 ): Promise<GeminiResponse> => {
     console.log("generateSceneState started for action:", playerAction);
@@ -398,7 +400,7 @@ export const generateSceneState = async (
         ).join('\n');
 
         const contextForModel = `
-        **현재 시간:** ${currentDay}일차, ${currentTime}시 (${timeOfDay})
+        **현재 시간/날씨:** ${currentDay}일차, ${currentTime}시 (${timeOfDay}), 날씨: ${currentWeather}
         **현재 챕터:** "${chapterPlan.chapterTitle}"
         **챕터 목표:** ${chapterPlan.overallGoal}
         **현재 단계 목표:** ${currentPlotPoint.objective}

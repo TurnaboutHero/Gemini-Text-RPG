@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { MessageSquare, History, ScrollText, ShoppingBag, User } from "lucide-react";
+import { MessageSquare, History, ScrollText, ShoppingBag, User, Sparkles } from "lucide-react";
 
 import { StoryPartType, AiScenePart } from './types';
 import { useGame } from './contexts/GameContext';
@@ -10,7 +10,7 @@ import { useBackgroundMusic } from './hooks/useBackgroundMusic';
 import Introduction from './components/Introduction';
 import CharacterCreator from './components/CharacterCreator';
 import Prologue from './components/Prologue';
-import LoadingSpinner from './components/LoadingSpinner';
+import LoadingDisplay from './components/LoadingDisplay';
 import CharacterSheet from './components/CharacterSheet';
 import SkillCheckPrompt from './components/SkillCheckPrompt';
 import ActionInput from './components/ActionInput';
@@ -64,6 +64,7 @@ const App: React.FC = () => {
     handleExecuteSpecialAction,
     handleRollSkillCheck,
     handleRestartFromDefeat,
+    handleRetry,
     addUiEffect,
     removeUiEffect,
   } = actions;
@@ -82,32 +83,66 @@ const App: React.FC = () => {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const mainScrollRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const scrollToBottom = () => {
-      if (activeTab === 'dialogue') {
-        chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-      }
-      if (mainScrollRef.current) {
-        mainScrollRef.current.scrollTo({
-          top: mainScrollRef.current.scrollHeight,
-          behavior: 'smooth'
-        });
-      }
-    };
+  const prevStoryLogLengthRef = useRef(0);
+  const prevLatestAiSceneIdRef = useRef<string | null>(null);
 
-    const timeoutId = setTimeout(scrollToBottom, 150);
-    // Add another delayed scroll to handle image rendering
-    const longTimeoutId = setTimeout(scrollToBottom, 600);
-    
+  useEffect(() => {
+    // 1. Dialogue Tab Auto-Scroll
+    if (activeTab === 'dialogue') {
+      const timeoutId = setTimeout(() => {
+         chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }, 150);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [activeTab, gameState.storyLog.length]);
+
+  useEffect(() => {
+    // 2. Main Scene Auto-Scroll
     if (gameState.gamePhase === 'start_menu') {
       setSavedGameExists(!!localStorage.getItem(LOCAL_STORAGE_KEY));
+      return;
     }
 
-    return () => {
-      clearTimeout(timeoutId);
-      clearTimeout(longTimeoutId);
+    const latestAiSceneIndex = gameState.storyLog.map(p => p.type).lastIndexOf(StoryPartType.AI_SCENE);
+    const latestAiScene = latestAiSceneIndex >= 0 ? gameState.storyLog[latestAiSceneIndex] as AiScenePart : undefined;
+    
+    let isNewScene = false;
+    if (latestAiScene && latestAiScene.id !== prevLatestAiSceneIdRef.current) {
+        isNewScene = true;
+        prevLatestAiSceneIdRef.current = latestAiScene.id;
+    }
+
+    const isNewLog = gameState.storyLog.length > prevStoryLogLengthRef.current;
+    prevStoryLogLengthRef.current = gameState.storyLog.length;
+
+    const handleMainScroll = () => {
+      if (mainScrollRef.current) {
+        if (isNewScene) {
+          // Scroll to the top of the newly generated scene content
+          mainScrollRef.current.scrollTo({
+            top: 0,
+            behavior: 'smooth'
+          });
+        } else if (isNewLog) {
+          // Appended user action or system message, scroll to the bottom
+          mainScrollRef.current.scrollTo({
+            top: mainScrollRef.current.scrollHeight,
+            behavior: 'smooth'
+          });
+        }
+      }
     };
-  }, [gameState.storyLog, activeTab, gameState.gamePhase]);
+
+    if (isNewScene || isNewLog) {
+      const timeoutId = setTimeout(handleMainScroll, 100);
+      const longTimeoutId = setTimeout(handleMainScroll, 500); // Handle image height changes optionally
+      
+      return () => {
+        clearTimeout(timeoutId);
+        clearTimeout(longTimeoutId);
+      };
+    }
+  }, [gameState.storyLog, gameState.gamePhase]);
 
   const isActionDisabled = () => {
     if (gameState.isLoading || gameState.currentSkillCheck || gameState.gamePhase === 'in_combat') return true;
@@ -163,8 +198,7 @@ const App: React.FC = () => {
     if (gameState.isLoading || !prologuePart) {
       return (
         <div className="min-h-screen bg-bg-deep flex flex-col items-center justify-center">
-          <LoadingSpinner />
-          <p className="mt-4 text-lg text-primary animate-pulse font-adventure tracking-widest">{gameState.loadingMessage || '모험의 서막을 여는 중...'}</p>
+          <LoadingDisplay message={gameState.loadingMessage || '모험의 서막을 여는 중...'} />
         </div>
       );
     }
@@ -180,6 +214,7 @@ const App: React.FC = () => {
       <Header 
         title={gameState.currentChapterPlan?.chapterTitle || "제미나이 연대기"} 
         currentTime={gameState.currentTime} 
+        currentWeather={gameState.currentWeather}
         currentLocationName={currentLocationName}
         useImageGeneration={gameState.useImageGeneration}
         isAudioMuted={isAudioMuted}
@@ -199,8 +234,24 @@ const App: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.3 }}
-              className="flex-1 flex flex-col h-full"
+              className="flex-1 flex flex-col h-full relative"
             >
+              {gameState.error && (
+                  <div className="absolute top-4 left-4 right-4 z-50 bg-red-900/90 border border-red-500/50 rounded-xl p-4 shadow-2xl backdrop-blur-md flex flex-col sm:flex-row items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                          <div className="bg-red-500/20 p-2 rounded-lg text-red-300">
+                             <Sparkles className="w-5 h-5" />
+                          </div>
+                          <div>
+                              <h3 className="text-red-200 font-bold mb-1">시스템 알림</h3>
+                              <p className="text-red-100/80 text-sm">{gameState.error}</p>
+                          </div>
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                          <button onClick={handleRetry} className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-200 font-bold rounded-lg text-sm transition-colors border border-red-500/30">다시 시도</button>
+                      </div>
+                  </div>
+              )}
               {gameState.gamePhase === 'in_combat' ? (
                 <CombatUI 
                   character={gameState.character!}
@@ -231,18 +282,15 @@ const App: React.FC = () => {
                     </div>
                   </div>
 
-                  <footer className="p-6 md:p-8 bg-gradient-to-t from-bg-deep via-bg-deep/95 to-transparent backdrop-blur-sm space-y-6 shrink-0 relative">
+                  <footer className="p-4 sm:p-6 md:p-8 bg-gradient-to-t from-bg-deep via-bg-deep/95 to-transparent backdrop-blur-sm space-y-4 sm:space-y-6 shrink-0 relative">
                     <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
                     {gameState.isLoading ? (
-                      <div className="flex flex-col items-center justify-center py-4 space-y-3">
-                        <LoadingSpinner />
-                        <p className="text-[10px] font-adventure text-primary/60 animate-pulse tracking-[0.4em] uppercase">구상 중...</p>
-                      </div>
+                      <LoadingDisplay message={gameState.loadingMessage} />
                     ) : gameState.currentSkillCheck ? (
                       <SkillCheckPrompt skillCheck={gameState.currentSkillCheck} character={gameState.character} onComplete={handleRollSkillCheck} />
                     ) : (
-                      <div className="max-w-4xl mx-auto space-y-5">
-                        <SuggestedActions actions={gameState.suggestedActions} onActionSelect={handleSendAction} disabled={isActionDisabled()} />
+                      <div className="max-w-4xl mx-auto space-y-3 sm:space-y-5">
+                        <SuggestedActions actions={[...gameState.suggestedActions].filter((val, index, self) => self.indexOf(val) === index)} onActionSelect={handleSendAction} disabled={isActionDisabled()} />
                         <div className="relative group">
                           <div className="absolute -inset-1 bg-primary/10 rounded-2xl blur-md opacity-0 group-focus-within:opacity-100 transition-opacity" />
                           <ActionInput onSubmit={handleSendAction} onOpenActionMenu={() => setGameState(p => ({ ...p, isActionMenuOpen: true }))} disabled={isActionDisabled()} />
@@ -257,24 +305,24 @@ const App: React.FC = () => {
         </main>
 
         {/* Side Panel (Right) - History & Data */}
-        <aside className="flex w-full lg:w-[450px] h-[35vh] lg:h-auto flex-col bg-bg-card/20 backdrop-blur-xl lg:m-4 lg:ml-2 lg:rounded-2xl border-t lg:border border-white/5 overflow-hidden shrink-0 shadow-[0_0_40px_rgba(0,0,0,0.5)] z-10 transition-all duration-300">
-          <div className="flex border-b border-white/5 bg-bg-deep/60 p-2 gap-1 px-2 md:px-3 shadow-sm">
+        <aside className="flex w-full lg:w-[450px] h-[40vh] min-h-[300px] lg:h-auto flex-col bg-bg-card/20 backdrop-blur-xl lg:m-4 lg:ml-2 lg:rounded-2xl border-t xl:border border-white/5 overflow-hidden shrink-0 shadow-[0_0_40px_rgba(0,0,0,0.5)] z-10 transition-all duration-300">
+          <div className="flex border-b border-white/5 bg-bg-deep/60 p-1.5 md:p-2 gap-1 px-1 md:px-3 shadow-sm overflow-x-auto hide-scrollbar">
             {[
-              { id: 'dialogue', label: '대화', icon: <MessageSquare className="w-5 h-5" /> },
-              { id: 'log', label: '로그', icon: <History className="w-5 h-5" /> },
-              { id: 'quest', label: '퀘스트', icon: <ScrollText className="w-5 h-5" /> },
-              { id: 'items', label: '아이템', icon: <ShoppingBag className="w-5 h-5" /> },
-              { id: 'profile', label: '프로필', icon: <User className="w-5 h-5" /> }
+              { id: 'dialogue', label: '대화', icon: <MessageSquare className="w-5 h-5 shrink-0" /> },
+              { id: 'log', label: '로그', icon: <History className="w-5 h-5 shrink-0" /> },
+              { id: 'quest', label: '퀘스트', icon: <ScrollText className="w-5 h-5 shrink-0" /> },
+              { id: 'items', label: '아이템', icon: <ShoppingBag className="w-5 h-5 shrink-0" /> },
+              { id: 'profile', label: '프로필', icon: <User className="w-5 h-5 shrink-0" /> }
             ].map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`flex-1 flex flex-col items-center justify-center py-3 rounded-lg transition-all relative group ${activeTab === tab.id ? 'bg-primary/10 text-primary shadow-inner' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}`}
+                className={`flex-1 min-w-[60px] flex flex-col items-center justify-center py-2 md:py-3 rounded-lg transition-all relative group ${activeTab === tab.id ? 'bg-primary/10 text-primary shadow-inner' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}`}
               >
-                <div className={`transition-transform duration-300 ${activeTab === tab.id ? 'scale-110 drop-shadow-[0_0_8px_rgba(212,175,55,0.5)]' : 'group-hover:scale-110'}`}>
+                <div className={`transition-transform duration-300 ${activeTab === tab.id ? 'scale-[1.15] drop-shadow-[0_0_8px_rgba(212,175,55,0.5)]' : 'group-hover:scale-110'}`}>
                   {tab.icon}
                 </div>
-                <span className={`text-[9px] font-bold uppercase tracking-widest mt-1.5 transition-opacity ${activeTab === tab.id ? 'opacity-100 font-bold' : 'opacity-70 group-hover:opacity-100'}`}>{tab.label}</span>
+                <span className={`text-[10px] sm:text-[9px] font-bold uppercase tracking-widest mt-1.5 transition-opacity ${activeTab === tab.id ? 'opacity-100 font-bold' : 'opacity-70 group-hover:opacity-100'}`}>{tab.label}</span>
                 {activeTab === tab.id && (
                   <motion.div 
                     layoutId="activeTabIndicator" 

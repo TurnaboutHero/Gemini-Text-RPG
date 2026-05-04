@@ -1,10 +1,12 @@
 import React from 'react';
 import { Sun, Moon, CloudSun, CloudMoon, HelpCircle, Map, Image as ImageIcon, ImageOff, Sparkles, Volume2, VolumeX } from 'lucide-react';
 import { motion } from 'motion/react';
+import { Weather } from '../types';
 
 interface HeaderProps {
   title: string;
   currentTime: number;
+  currentWeather?: Weather;
   currentLocationName: string;
   useImageGeneration: boolean;
   isAudioMuted: boolean;
@@ -21,7 +23,7 @@ const getTimeInfo = (hour: number): { period: string; icon: React.ReactNode } =>
     return { period: '밤', icon: <Moon className="text-indigo-400 w-4 h-4" /> };
 };
 
-const Header: React.FC<HeaderProps> = ({ title, currentTime, currentLocationName, useImageGeneration, isAudioMuted, onToggleImageGeneration, onToggleAudio, onOpenMap, onOpenCharacterSheet }) => {
+const Header: React.FC<HeaderProps> = ({ title, currentTime, currentWeather = '맑음', currentLocationName, useImageGeneration, isAudioMuted, onToggleImageGeneration, onToggleAudio, onOpenMap, onOpenCharacterSheet }) => {
     const { icon, period } = getTimeInfo(currentTime);
 
     return (
@@ -38,7 +40,7 @@ const Header: React.FC<HeaderProps> = ({ title, currentTime, currentLocationName
                         <div className="w-1 h-1 rounded-full bg-primary/30" />
                         <div className="flex items-center gap-1.5 opacity-60">
                             {icon}
-                            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{period}</span>
+                            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{period} • {currentWeather}</span>
                         </div>
                     </div>
                     <h1 className="text-lg md:text-xl font-bold tracking-[0.15em] text-primary text-glow font-adventure uppercase leading-none">

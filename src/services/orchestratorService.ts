@@ -55,6 +55,7 @@ export const executeSpecialAction = async (
   worldMap: WorldMap | null,
   currentTime: number,
   currentDay: number,
+  currentWeather: string,
   useImageGeneration: boolean,
   imageModel: ImageModel = 'gemini-2.5-flash-image',
   entityImages: Record<string, string> = {}
@@ -63,40 +64,60 @@ export const executeSpecialAction = async (
         case SpecialActionType.SUMMARY:
             const summaryActionText = "지금까지의 모험 내용을 음유시인이 들려주는 이야기처럼 흥미진진하게 요약해줘. 현재 나의 위치, 주요 사건, 그리고 당면한 목표를 중심으로 설명해줘.";
             return { 
-                actionResult: await processPlayerAction(summaryActionText, character, storyLog, currentPlan, chapterSummaries, currentNpcs, currentLocationId, worldMap, currentTime, currentDay, useImageGeneration, imageModel, entityImages) 
+                actionResult: await processPlayerAction(summaryActionText, character, storyLog, currentPlan, chapterSummaries, currentNpcs, currentLocationId, worldMap, currentTime, currentDay, currentWeather, useImageGeneration, imageModel, entityImages) 
             };
 
         case SpecialActionType.TALK_TO_NPC:
             if (!action.payload) throw new Error("대화할 NPC가 지정되지 않았습니다.");
             const talkActionText = `"${action.payload}에게 말을 건다."`;
             return { 
-                actionResult: await processPlayerAction(talkActionText, character, storyLog, currentPlan, chapterSummaries, currentNpcs, currentLocationId, worldMap, currentTime, currentDay, useImageGeneration, imageModel, entityImages) 
+                actionResult: await processPlayerAction(talkActionText, character, storyLog, currentPlan, chapterSummaries, currentNpcs, currentLocationId, worldMap, currentTime, currentDay, currentWeather, useImageGeneration, imageModel, entityImages) 
             };
 
         case SpecialActionType.USE_ITEM:
             if (!action.payload) throw new Error("사용할 아이템이 지정되지 않았습니다.");
             const useItemActionText = `"${action.payload}을(를) 사용한다."`;
              return { 
-                actionResult: await processPlayerAction(useItemActionText, character, storyLog, currentPlan, chapterSummaries, currentNpcs, currentLocationId, worldMap, currentTime, currentDay, useImageGeneration, imageModel, entityImages) 
+                actionResult: await processPlayerAction(useItemActionText, character, storyLog, currentPlan, chapterSummaries, currentNpcs, currentLocationId, worldMap, currentTime, currentDay, currentWeather, useImageGeneration, imageModel, entityImages) 
             };
 
         case SpecialActionType.DESCRIBE_CHARACTER:
             const charDescActionText = "내 캐릭터의 현재 외형과 장비, 그리고 분위기에 대해 아주 자세하게 묘사해줘. (현재 묘사되지 않은 세부 정보 포함)";
             return {
-                actionResult: await processPlayerAction(charDescActionText, character, storyLog, currentPlan, chapterSummaries, currentNpcs, currentLocationId, worldMap, currentTime, currentDay, useImageGeneration, imageModel, entityImages)
+                actionResult: await processPlayerAction(charDescActionText, character, storyLog, currentPlan, chapterSummaries, currentNpcs, currentLocationId, worldMap, currentTime, currentDay, currentWeather, useImageGeneration, imageModel, entityImages)
             };
 
         case SpecialActionType.DESCRIBE_ENVIRONMENT:
             const envDescActionText = "현재 내가 있는 장소의 주변 환경, 날씨, 소리, 냄새 등 오감을 자극하는 세부적인 정보들을 아주 자세하게 묘사해줘. (현재 묘사되지 않은 세부 정보 포함)";
             return {
-                actionResult: await processPlayerAction(envDescActionText, character, storyLog, currentPlan, chapterSummaries, currentNpcs, currentLocationId, worldMap, currentTime, currentDay, useImageGeneration, imageModel, entityImages)
+                actionResult: await processPlayerAction(envDescActionText, character, storyLog, currentPlan, chapterSummaries, currentNpcs, currentLocationId, worldMap, currentTime, currentDay, currentWeather, useImageGeneration, imageModel, entityImages)
+            };
+
+        case SpecialActionType.SEARCH_SURROUNDINGS:
+            const searchActionText = "주변을 샅샅이 뒤져 숨겨진 단서나 상호작용 가능한 물건(아이템, 서랍, 숨겨진 문, 메모 등)이 있는지 찾아본다.";
+            return {
+                actionResult: await processPlayerAction(searchActionText, character, storyLog, currentPlan, chapterSummaries, currentNpcs, currentLocationId, worldMap, currentTime, currentDay, currentWeather, useImageGeneration, imageModel, entityImages)
+            };
+
+        case SpecialActionType.INVESTIGATE_OBJECT:
+            if (!action.payload) throw new Error("조사할 사물이 지정되지 않았습니다.");
+            const investigateActionText = `"${action.payload}"을(를) 아주 세밀하게 조사한다. 구조, 재질, 작동 방식, 숨겨진 장치나 단서가 있는지 확인한다.`;
+            return {
+                actionResult: await processPlayerAction(investigateActionText, character, storyLog, currentPlan, chapterSummaries, currentNpcs, currentLocationId, worldMap, currentTime, currentDay, currentWeather, useImageGeneration, imageModel, entityImages)
+            };
+
+        case SpecialActionType.USE_ENVIRONMENT_ITEM:
+            if (!action.payload) throw new Error("사용할 아이템이 지정되지 않았습니다.");
+            const useEnvItemActionText = `"${action.payload}"을(를) 활용하여 현재 상황(어둠 밝히기, 장애물 제거, 길 열기 등)을 타개하거나 주변 환경에 변화를 일으킨다.`;
+            return {
+                actionResult: await processPlayerAction(useEnvItemActionText, character, storyLog, currentPlan, chapterSummaries, currentNpcs, currentLocationId, worldMap, currentTime, currentDay, currentWeather, useImageGeneration, imageModel, entityImages)
             };
 
         case SpecialActionType.INITIATE_CONVERSATION:
             if (!action.payload) throw new Error("대화할 NPC가 지정되지 않았습니다.");
             const initiateActionText = `"${action.payload}"(이)가 나에게 먼저 말을 걸어오도록 유도해줘. 어떤 대화 주제가 좋을지 제안하며 대화를 시작해줘.`;
             return {
-                actionResult: await processPlayerAction(initiateActionText, character, storyLog, currentPlan, chapterSummaries, currentNpcs, currentLocationId, worldMap, currentTime, currentDay, useImageGeneration, imageModel, entityImages)
+                actionResult: await processPlayerAction(initiateActionText, character, storyLog, currentPlan, chapterSummaries, currentNpcs, currentLocationId, worldMap, currentTime, currentDay, currentWeather, useImageGeneration, imageModel, entityImages)
             };
 
         default:
@@ -122,6 +143,7 @@ export const processPlayerAction = async (
   worldMap: WorldMap | null,
   currentTime: number,
   currentDay: number,
+  currentWeather: string,
   useImageGeneration: boolean,
   imageModel: ImageModel = 'gemini-2.5-flash-image',
   entityImages: Record<string, string> = {}
@@ -182,7 +204,7 @@ export const processPlayerAction = async (
       updatedLocationId = Object.keys(updatedWorldMap)[0]; // Start at the first location of the new chapter
   }
 
-  const newScene = await generateSceneState(character, storyLog, actionText, plan, updatedNpcs, updatedLocationId, updatedWorldMap, currentTime, currentDay, updatedSummaries);
+  const newScene = await generateSceneState(character, storyLog, actionText, plan, updatedNpcs, updatedLocationId, updatedWorldMap, currentTime, currentDay, currentWeather, updatedSummaries);
   
   const imagePromises: Promise<ImagePromiseResult>[] = [];
   let newEntityImages = { ...entityImages };

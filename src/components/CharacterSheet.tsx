@@ -32,6 +32,15 @@ const ProgressBar: React.FC<{ value: number; max: number; label: string; color: 
     </div>
 );
 
+const ABILITY_DESCRIPTIONS: Record<Ability, string> = {
+  '힘': '물리적인 힘과 근력. 주로 근접 무기 공격력과 여러 체력 기반 판정에 영향을 미칩니다.',
+  '민첩': '민첩성, 반사신경, 균형감각. 원거리 무기 공격력, 방어력, 회피 관련 행동에 영향을 미칩니다.',
+  '건강': '지구력과 생명력. 캐릭터의 최대 체력(HP)과 독, 질병 등에 대한 저항력에 큰 영향을 줍니다.',
+  '지능': '정신적 예리함, 기억력. 마법 사용이나 뛰어난 지식이 필요한 조사 판정에 쓰입니다.',
+  '지혜': '주변 상황에 대한 인지력과 직관력. 판단력을 요구하거나 눈치채기 행동에 주로 쓰입니다.',
+  '매력': '타인에게 호감을 주거나 설득하는 능력. 대인 관계, 협상, 기만 등의 판정에 큰 영향을 미칩니다.'
+};
+
 const CharacterSheet: React.FC<CharacterSheetProps> = ({ character, calculatedStats, onClose, onNewGame, onEquipItem, onUnequipItem }) => {
   const [activeTab, setActiveTab] = useState<'stats' | 'inventory'>('stats');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -57,11 +66,46 @@ const CharacterSheet: React.FC<CharacterSheetProps> = ({ character, calculatedSt
     const bonus = finalScore - baseScore;
 
     return (
-        <div key={ability} className="bg-gray-700/50 p-2 rounded-lg flex flex-col justify-center items-center">
-            <div className="text-sm text-gray-400">{ability}</div>
-            <div className="text-2xl font-bold text-white">{finalScore}</div>
-            <div className="text-md font-bold text-cyan-400">({modifierString})</div>
-            {bonus !== 0 && <div className={`text-xs ${bonus > 0 ? 'text-green-400' : 'text-red-400'}`}>{baseScore} {bonus > 0 ? `+${bonus}` : bonus}</div>}
+        <div key={ability} className="relative group bg-gray-700/40 p-3 rounded-xl flex flex-col justify-center items-center hover:bg-gray-700/60 transition-colors border border-gray-600/30 hover:border-cyan-500/50">
+            <div className="text-sm text-gray-400 font-bold mb-1">{ability}</div>
+            <div className="text-3xl font-black text-white">{finalScore}</div>
+            <div className={`text-md font-bold mt-1 ${modifier > 0 ? 'text-green-400' : modifier < 0 ? 'text-red-400' : 'text-gray-400'}`}>
+                {modifierString}
+            </div>
+            
+            {/* Tooltip */}
+            <div className="absolute top-1/2 -translate-y-1/2 left-full ml-3 w-64 bg-gray-900 border border-cyan-500/30 text-left p-4 rounded-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 shadow-2xl pointer-events-none md:origin-left scale-95 group-hover:scale-100">
+                <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-700">
+                    <span className="text-lg font-bold text-cyan-300">{ability}</span>
+                </div>
+                <div className="text-[13px] text-gray-300 mb-3 leading-relaxed">
+                    {ABILITY_DESCRIPTIONS[ability]}
+                </div>
+                
+                <div className="bg-gray-950/50 rounded-lg p-3 space-y-2 border border-gray-800">
+                    <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-400">기본 능력치</span>
+                        <span className="font-mono text-gray-300">{baseScore}</span>
+                    </div>
+                    {bonus !== 0 && (
+                        <div className="flex justify-between items-center text-sm">
+                            <span className="text-gray-400">장비 효과</span>
+                            <span className={`font-mono font-medium ${bonus > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                {bonus > 0 ? `+${bonus}` : bonus}
+                            </span>
+                        </div>
+                    )}
+                    <div className="flex justify-between items-center text-sm pt-2 border-t border-gray-800">
+                        <span className="font-bold text-gray-400">최종 수정치</span>
+                        <span className={`font-mono font-black text-lg ${modifier > 0 ? 'text-green-400' : modifier < 0 ? 'text-red-400' : 'text-gray-400'}`}>
+                            {modifierString}
+                        </span>
+                    </div>
+                </div>
+                
+                {/* Tooltip Arrow */}
+                <div className="absolute top-1/2 -left-2 -translate-y-1/2 w-4 h-4 bg-gray-900 border-b border-l border-cyan-500/30 rotate-45" />
+            </div>
         </div>
     );
   };

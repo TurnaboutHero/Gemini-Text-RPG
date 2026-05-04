@@ -183,6 +183,9 @@ export enum SpecialActionType {
   USE_ITEM = 'USE_ITEM',
   DESCRIBE_CHARACTER = 'DESCRIBE_CHARACTER',
   DESCRIBE_ENVIRONMENT = 'DESCRIBE_ENVIRONMENT',
+  SEARCH_SURROUNDINGS = 'SEARCH_SURROUNDINGS',
+  INVESTIGATE_OBJECT = 'INVESTIGATE_OBJECT',
+  USE_ENVIRONMENT_ITEM = 'USE_ENVIRONMENT_ITEM',
   INITIATE_CONVERSATION = 'INITIATE_CONVERSATION',
 }
 
@@ -220,6 +223,8 @@ export interface CombatState {
 
 export type ImageModel = 'gemini-2.5-flash-image' | 'imagen-4.0-generate-001' | 'gemini-3-pro-image-preview' | 'gemini-3.1-flash-image-preview';
 
+export type Weather = '맑음' | '흐림' | '비' | '눈' | '폭풍' | '안개';
+
 export interface GameState {
   storyLog: StoryLogEntry[];
   isLoading: boolean;
@@ -237,6 +242,7 @@ export interface GameState {
   currentLocationId: string | null;
   currentTime: number; // 0-23 representing hours
   currentDay: number;
+  currentWeather: Weather;
   combatState: CombatState | null;
   currentShop: { name: string; inventory: Item[] } | null;
   uiEffects: UiEffect[];
@@ -280,6 +286,7 @@ export interface GeminiResponse {
   goldChange?: number;
   playerMovedTo?: string; // New location ID
   timeElapsed?: number; // in hours
+  weatherChange?: Weather;
   enterCombat?: { name: string; hp: number; attack: number; defense: number; imagePrompt: string; }[];
   skillLearned?: {
     name: string;

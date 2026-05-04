@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Character, Npc, SpecialAction, SpecialActionType, ItemType } from '../types';
-import { BookOpen, MessageSquare, Briefcase, X, Sword, Shield, FlaskConical, Scroll, Package } from 'lucide-react';
+import { BookOpen, MessageSquare, Briefcase, X, Sword, Shield, FlaskConical, Scroll, Package, Search } from 'lucide-react';
 
 const itemTypeIcons: Record<ItemType, React.ReactNode> = {
     weapon: <Sword size={14} className="text-red-400" />,
@@ -19,6 +19,8 @@ interface ActionMenuProps {
 }
 
 const ActionMenu: React.FC<ActionMenuProps> = ({ isOpen, onClose, onExecuteAction, character, npcs }) => {
+  const [investigateInput, setInvestigateInput] = useState('');
+
   if (!isOpen) return null;
 
   const handleActionClick = (action: SpecialAction) => {
@@ -27,6 +29,7 @@ const ActionMenu: React.FC<ActionMenuProps> = ({ isOpen, onClose, onExecuteActio
   
   const presentNpcs = Object.values(npcs);
   const usableItems = character?.inventory.filter(item => item.itemType === 'consumable') || [];
+  const environmentItems = character?.inventory.filter(item => ['quest', 'misc', 'weapon'].includes(item.itemType)) || [];
 
   return (
     <div
@@ -56,6 +59,36 @@ const ActionMenu: React.FC<ActionMenuProps> = ({ isOpen, onClose, onExecuteActio
               <BookOpen className="w-3.5 h-3.5" />
               탐색 및 조사
             </h3>
+            
+            {/* Specific Object Investigation */}
+            <div className="mb-4 flex gap-2">
+                <input 
+                    type="text" 
+                    value={investigateInput} 
+                    onChange={(e) => setInvestigateInput(e.target.value)}
+                    placeholder="조사할 사물 (예: 낡은 상자)"
+                    className="flex-1 bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50"
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' && investigateInput.trim()) {
+                            handleActionClick({ type: SpecialActionType.INVESTIGATE_OBJECT, payload: investigateInput.trim() });
+                            setInvestigateInput('');
+                        }
+                    }}
+                />
+                <button
+                    onClick={() => {
+                        if (investigateInput.trim()) {
+                            handleActionClick({ type: SpecialActionType.INVESTIGATE_OBJECT, payload: investigateInput.trim() });
+                            setInvestigateInput('');
+                        }
+                    }}
+                    disabled={!investigateInput.trim()}
+                    className="bg-primary/20 text-primary p-2 rounded-lg border border-primary/30 hover:bg-primary/30 disabled:opacity-50 transition-colors"
+                >
+                    <Search className="w-4 h-4" />
+                </button>
+            </div>
+
             <div className="grid grid-cols-2 gap-2.5">
               <button
                 onClick={() => handleActionClick({ type: SpecialActionType.SUMMARY })}
@@ -64,28 +97,22 @@ const ActionMenu: React.FC<ActionMenuProps> = ({ isOpen, onClose, onExecuteActio
                 상황 요약
               </button>
               <button
-                onClick={() => handleActionClick({ type: SpecialActionType.TALK_TO_NPC, payload: "주변을 조사한다" })}
+                onClick={() => handleActionClick({ type: SpecialActionType.SEARCH_SURROUNDINGS })}
                 className="text-center bg-white/5 border border-white/5 text-gray-200 font-sans rounded-xl px-3 py-2.5 hover:bg-primary/20 hover:border-primary/40 hover:text-primary hover:shadow-[0_0_15px_rgba(212,175,55,0.2)] transition-all text-xs focus:ring-2 focus:ring-primary/50 outline-none"
               >
-                주변 조사
-              </button>
-              <button
-                onClick={() => handleActionClick({ type: SpecialActionType.TALK_TO_NPC, payload: "주변을 둘러본다" })}
-                className="text-center bg-white/5 border border-white/5 text-gray-200 font-sans rounded-xl px-3 py-2.5 hover:bg-primary/20 hover:border-primary/40 hover:text-primary hover:shadow-[0_0_15px_rgba(212,175,55,0.2)] transition-all text-xs focus:ring-2 focus:ring-primary/50 outline-none"
-              >
-                주변 관찰
-              </button>
-              <button
-                onClick={() => handleActionClick({ type: SpecialActionType.DESCRIBE_CHARACTER })}
-                className="text-center bg-white/5 border border-white/5 text-gray-200 font-sans rounded-xl px-3 py-2.5 hover:bg-primary/20 hover:border-primary/40 hover:text-primary hover:shadow-[0_0_15px_rgba(212,175,55,0.2)] transition-all text-xs focus:ring-2 focus:ring-primary/50 outline-none"
-              >
-                캐릭터 묘사
+                숨겨진 단서 탐색
               </button>
               <button
                 onClick={() => handleActionClick({ type: SpecialActionType.DESCRIBE_ENVIRONMENT })}
                 className="text-center bg-white/5 border border-white/5 text-gray-200 font-sans rounded-xl px-3 py-2.5 hover:bg-primary/20 hover:border-primary/40 hover:text-primary hover:shadow-[0_0_15px_rgba(212,175,55,0.2)] transition-all text-xs focus:ring-2 focus:ring-primary/50 outline-none"
               >
                 환경 세부 묘사
+              </button>
+              <button
+                onClick={() => handleActionClick({ type: SpecialActionType.DESCRIBE_CHARACTER })}
+                className="text-center bg-white/5 border border-white/5 text-gray-200 font-sans rounded-xl px-3 py-2.5 hover:bg-primary/20 hover:border-primary/40 hover:text-primary hover:shadow-[0_0_15px_rgba(212,175,55,0.2)] transition-all text-xs focus:ring-2 focus:ring-primary/50 outline-none"
+              >
+                캐릭터 묘사
               </button>
               <button
                 onClick={() => handleActionClick({ type: SpecialActionType.TALK_TO_NPC, payload: "누구 없나요? 라고 외친다" })}
@@ -154,6 +181,30 @@ const ActionMenu: React.FC<ActionMenuProps> = ({ isOpen, onClose, onExecuteActio
             </div>
           )}
           
+          {/* Environment Item Actions */}
+          {environmentItems.length > 0 && (
+             <div>
+                <h3 className="text-[11px] font-bold text-primary/70 border-b border-primary/10 pb-1.5 mb-3 flex items-center gap-2 uppercase tracking-[0.2em]">
+                    <Search className="w-3.5 h-3.5" />
+                    환경 상호작용
+                </h3>
+                <div className="grid grid-cols-2 gap-2">
+                    {environmentItems.map(item => (
+                        <button
+                            key={item.id}
+                            onClick={() => handleActionClick({ type: SpecialActionType.USE_ENVIRONMENT_ITEM, payload: item.name })}
+                            className="bg-white/5 border border-white/5 text-gray-200 font-sans rounded-xl p-2 hover:bg-primary/20 hover:border-primary/40 hover:text-primary transition-all text-xs flex flex-col items-center gap-1.5 text-center"
+                        >
+                            <div className="bg-gray-800 p-1.5 rounded-full border border-gray-600 shadow-inner group-hover:border-primary/50">
+                                {itemTypeIcons[item.itemType] || <Package size={14} className="text-gray-400" />}
+                            </div>
+                            <span className="truncate w-full">{item.name} 활용</span>
+                        </button>
+                    ))}
+                </div>
+            </div>
+          )}
+
           {/* Item Actions */}
           {usableItems.length > 0 && (
             <div>

@@ -122,6 +122,7 @@ export const useGameActions = (
             worldMap: updatedWorldMap,
             currentTime: newTime,
             currentDay: newDay,
+            currentWeather: newScene.weatherChange || prev.currentWeather,
             currentShop: shop || null,
             entityImages: newEntityImages,
         };
@@ -256,7 +257,7 @@ export const useGameActions = (
       
       setGameState(prev => ({ ...prev, isLoading: true, loadingMessage: 'AI가 행동 결과를 계산하는 중...', error: null, storyLog: [...prev.storyLog, userActionPart], suggestedActions: [], currentShop: null }));
       
-      const result = await orchestrator.processPlayerAction(actionText, currentState.character!, currentState.storyLog, currentState.currentChapterPlan!, currentState.chapterSummaries, currentState.npcs, currentState.currentLocationId, currentState.worldMap, currentState.currentTime, currentState.currentDay, currentState.useImageGeneration, currentState.imageModel, currentState.entityImages);
+      const result = await orchestrator.processPlayerAction(actionText, currentState.character!, currentState.storyLog, currentState.currentChapterPlan!, currentState.chapterSummaries, currentState.npcs, currentState.currentLocationId, currentState.worldMap, currentState.currentTime, currentState.currentDay, currentState.currentWeather, currentState.useImageGeneration, currentState.imageModel, currentState.entityImages);
       
       setGameState(prev => ({ ...prev, loadingMessage: 'AI가 장면 이미지를 생성하는 중...' }));
       
@@ -360,7 +361,7 @@ export const useGameActions = (
       
       const lastAiPart = [...currentState.storyLog].reverse().find(p => p.type === StoryPartType.AI_SCENE) as AiScenePart | undefined;
       const previousImageUrl = lastAiPart ? lastAiPart.imageUrl : '';
-      const result = await orchestrator.executeSpecialAction(action, currentState.character!, currentState.storyLog, currentState.currentChapterPlan!, currentState.chapterSummaries, currentState.npcs, currentState.currentLocationId, currentState.worldMap, currentState.currentTime, currentState.currentDay, currentState.useImageGeneration, currentState.imageModel, currentState.entityImages);
+      const result = await orchestrator.executeSpecialAction(action, currentState.character!, currentState.storyLog, currentState.currentChapterPlan!, currentState.chapterSummaries, currentState.npcs, currentState.currentLocationId, currentState.worldMap, currentState.currentTime, currentState.currentDay, currentState.currentWeather, currentState.useImageGeneration, currentState.imageModel, currentState.entityImages);
 
       if ('summaryMessage' in result) {
         setGameState(p => ({ ...p, storyLog: [...p.storyLog, result.summaryMessage], isLoading: false }));
